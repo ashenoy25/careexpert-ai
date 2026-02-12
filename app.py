@@ -1,0 +1,1011 @@
+"""
+CareExpert AI - Evidence-Based Caregiving Assistant
+Built by MeetCaregivers Inc. | Newton, MA
+Architecture: Anthropic Claude API + TF-IDF Retrieval + Streamlit
+"""
+
+import streamlit as st
+import os
+from pathlib import Path
+import anthropic
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
+import json
+
+# --- Brand Colors ---
+BRAND = {
+    "primary": "#00d084",       # MeetCaregivers teal-green
+    "primary_dark": "#00b371",  # Darker teal for hover
+    "secondary": "#0693e3",     # Cyan-blue
+    "dark": "#32373c",          # Charcoal text
+    "light_bg": "#f7f9fc",      # Off-white background
+    "white": "#ffffff",
+    "muted": "#abb8c3",         # Gray borders
+    "amber": "#fcb900",         # Warnings
+    "light_teal": "#e6faf2",    # Teal tint for cards
+}
+
+# --- Source Name Registry ---
+SOURCE_REGISTRY = {
+    "AARP_caregiving_resources": {
+        "name": "AARP Caregiving Resource Center",
+        "org": "AARP",
+        "type": "Consumer Resource",
+        "icon": "\U0001F4D6",
+        "url": "https://www.aarp.org/caregiving/",
+    },
+    "ACL_national_caregiver_strategy": {
+        "name": "National Strategy to Support Family Caregivers (2022)",
+        "org": "Administration for Community Living (ACL)",
+        "type": "Federal Policy",
+        "icon": "\U0001F3DB\uFE0F",
+        "url": "https://acl.gov/CaregiverStrategy",
+    },
+    "ADA_caregiver_resources": {
+        "name": "Diabetes Care Guidelines for Caregivers",
+        "org": "American Diabetes Association (ADA)",
+        "type": "Clinical Guideline",
+        "icon": "\U0001F3E5",
+        "url": "https://diabetes.org/tools-resources",
+    },
+    "AHA_caregiver_resources": {
+        "name": "Heart Failure & Stroke Caregiver Guidelines",
+        "org": "American Heart Association (AHA)",
+        "type": "Clinical Guideline",
+        "icon": "\U0001F3E5",
+        "url": "https://www.heart.org/en/health-topics/caregiver-support",
+    },
+    "AHRQ_WHO_NICE_guidelines": {
+        "name": "Fall Prevention, Patient Safety & Home Care Guidelines",
+        "org": "AHRQ, WHO, NICE (UK)",
+        "type": "Clinical Guideline",
+        "icon": "\U0001F3E5",
+        "url": "https://www.ahrq.gov/",
+    },
+    "AlzAssoc_caregiver_resources": {
+        "name": "Dementia Care Practice Recommendations",
+        "org": "Alzheimer's Association",
+        "type": "Clinical Guideline",
+        "icon": "\U0001F3E5",
+        "url": "https://www.alz.org/help-support/caregiving",
+    },
+    "CDC_infection_control_and_falls": {
+        "name": "Infection Control & STEADI Fall Prevention",
+        "org": "Centers for Disease Control and Prevention (CDC)",
+        "type": "Federal Guideline",
+        "icon": "\U0001F3DB\uFE0F",
+        "url": "https://www.cdc.gov/steadi/",
+    },
+    "chronic_pain_management_caregivers": {
+        "name": "Non-Pharmacological Pain Management for Caregivers",
+        "org": "American Geriatrics Society (AGS), NCCIH, APTA",
+        "type": "Clinical Guideline",
+        "icon": "\U0001F3E5",
+        "url": "https://www.americangeriatrics.org/",
+    },
+    "CMS_HHA_requirements": {
+        "name": "Home Health Aide Training & Scope of Practice (42 CFR 484.80)",
+        "org": "Centers for Medicare & Medicaid Services (CMS)",
+        "type": "Federal Regulation",
+        "icon": "\U0001F3DB\uFE0F",
+        "url": "https://www.cms.gov/",
+    },
+    "communication_and_caregiving_resources": {
+        "name": "Communication Skills & Cultural Sensitivity in Caregiving",
+        "org": "Alzheimer's Association, NICE",
+        "type": "Clinical Guideline",
+        "icon": "\U0001F3E5",
+        "url": "https://www.alz.org/",
+    },
+    "FCA_resources_catalog": {
+        "name": "Condition-Specific Caregiver Fact Sheets",
+        "org": "Family Caregiver Alliance (FCA)",
+        "type": "Consumer Resource",
+        "icon": "\U0001F4D6",
+        "url": "https://www.caregiver.org/",
+    },
+    "MedlinePlus_caregiving_topics": {
+        "name": "Consumer Health Topics: Caregiving, Falls, Dementia",
+        "org": "MedlinePlus / National Library of Medicine (NIH)",
+        "type": "Consumer Resource (NIH)",
+        "icon": "\U0001F4D6",
+        "url": "https://medlineplus.gov/",
+    },
+    "NIA_caregiving_guides": {
+        "name": "Caregiving & Alzheimer's Care Guides",
+        "org": "National Institute on Aging (NIA), NIH",
+        "type": "Federal Guideline",
+        "icon": "\U0001F3DB\uFE0F",
+        "url": "https://www.nia.nih.gov/health/caregiving",
+    },
+    "NIA_end_of_life_resources": {
+        "name": "End-of-Life Care, Comfort Care & Advance Directives",
+        "org": "National Institute on Aging (NIA), NIH",
+        "type": "Federal Guideline",
+        "icon": "\U0001F3DB\uFE0F",
+        "url": "https://www.nia.nih.gov/health/end-of-life",
+    },
+    "NIA_nutrition_elderly_resources": {
+        "name": "Nutrition, Healthy Eating & Food Safety for Older Adults",
+        "org": "National Institute on Aging (NIA), NIH",
+        "type": "Federal Guideline",
+        "icon": "\U0001F3DB\uFE0F",
+        "url": "https://www.nia.nih.gov/health/nutrition-and-food-safety",
+    },
+    "pressure_ulcer_prevention_guidelines": {
+        "name": "Pressure Injury Prevention & Staging Guidelines",
+        "org": "NPUAP/EPUAP/PPPIA, AHRQ, WOCN",
+        "type": "International Clinical Guideline",
+        "icon": "\U0001F3E5",
+        "url": "https://npiap.com/",
+    },
+    "pubmed_batch1_searches": {
+        "name": "Peer-Reviewed Research: Core Caregiving Topics",
+        "org": "PubMed / National Library of Medicine",
+        "type": "Peer-Reviewed Literature",
+        "icon": "\U0001F52C",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/",
+    },
+    "pubmed_batch2_searches": {
+        "name": "Peer-Reviewed Research: Clinical Conditions",
+        "org": "PubMed / National Library of Medicine",
+        "type": "Peer-Reviewed Literature",
+        "icon": "\U0001F52C",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/",
+    },
+    "pubmed_supplementary_searches": {
+        "name": "Peer-Reviewed Research: Supplementary Evidence",
+        "org": "PubMed / National Library of Medicine",
+        "type": "Peer-Reviewed Literature",
+        "icon": "\U0001F52C",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/",
+    },
+    "top_systematic_reviews": {
+        "name": "Landmark Systematic Reviews & Meta-Analyses",
+        "org": "Cochrane Library, Lancet, BMJ, JAGS",
+        "type": "Highest-Level Evidence (Systematic Reviews)",
+        "icon": "\U0001F31F",
+        "url": "https://www.cochranelibrary.com/",
+    },
+    "training_curricula_overview": {
+        "name": "HHA/CNA Training Programs (PHI, REACH II, SAVVY Caregiver)",
+        "org": "PHI, NYS Dept. of Health, NIA/NIH, Univ. of Minnesota",
+        "type": "Professional Training Material",
+        "icon": "\U0001F393",
+        "url": "https://www.phinational.org/",
+    },
+}
+
+
+def get_source_display(filename_stem):
+    """Get professional display info for a source."""
+    if filename_stem in SOURCE_REGISTRY:
+        return SOURCE_REGISTRY[filename_stem]
+    return {
+        "name": filename_stem.replace("_", " ").title(),
+        "org": "CareExpert AI Knowledge Base",
+        "type": "Reference",
+        "icon": "\U0001F4C4",
+        "url": "",
+    }
+
+
+# --- Page Config ---
+st.set_page_config(
+    page_title="CareExpert AI | MeetCaregivers",
+    page_icon="\U0001F49A",
+    layout="centered",
+    initial_sidebar_state="expanded"
+)
+
+# --- Custom CSS ---
+st.markdown(f"""
+<style>
+    /* Brand colors */
+    .stApp {{
+        background-color: {BRAND['light_bg']};
+    }}
+
+    /* Sidebar styling */
+    section[data-testid="stSidebar"] {{
+        background-color: {BRAND['white']};
+        border-right: 1px solid {BRAND['muted']}40;
+    }}
+
+    /* Header bar */
+    .brand-header {{
+        background: linear-gradient(135deg, {BRAND['primary']} 0%, {BRAND['primary_dark']} 100%);
+        color: white;
+        padding: 1.2rem 1.5rem;
+        border-radius: 12px;
+        margin-bottom: 1.5rem;
+    }}
+    .brand-header h1 {{
+        margin: 0;
+        font-size: 1.6rem;
+        font-weight: 700;
+    }}
+    .brand-header p {{
+        margin: 0.3rem 0 0 0;
+        font-size: 0.9rem;
+        opacity: 0.9;
+    }}
+
+    /* Stats cards */
+    .stat-card {{
+        background: {BRAND['white']};
+        border: 1px solid {BRAND['muted']}30;
+        border-radius: 10px;
+        padding: 1rem;
+        text-align: center;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }}
+    .stat-card .stat-number {{
+        font-size: 1.8rem;
+        font-weight: 700;
+        color: {BRAND['primary']};
+        line-height: 1;
+    }}
+    .stat-card .stat-label {{
+        font-size: 0.75rem;
+        color: {BRAND['dark']};
+        margin-top: 0.3rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }}
+
+    /* Source cards in About */
+    .source-card {{
+        background: {BRAND['white']};
+        border-left: 4px solid {BRAND['primary']};
+        border-radius: 0 8px 8px 0;
+        padding: 0.8rem 1rem;
+        margin-bottom: 0.6rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }}
+    .source-card-clinical {{
+        border-left-color: {BRAND['secondary']};
+    }}
+    .source-card-research {{
+        border-left-color: #9b51e0;
+    }}
+    .source-card-federal {{
+        border-left-color: {BRAND['primary_dark']};
+    }}
+    .source-card .source-name {{
+        font-weight: 600;
+        font-size: 0.9rem;
+        color: {BRAND['dark']};
+    }}
+    .source-card .source-org {{
+        font-size: 0.8rem;
+        color: #666;
+    }}
+    .source-card .source-type {{
+        display: inline-block;
+        background: {BRAND['light_teal']};
+        color: {BRAND['primary_dark']};
+        font-size: 0.7rem;
+        padding: 2px 8px;
+        border-radius: 10px;
+        margin-top: 4px;
+        font-weight: 500;
+    }}
+
+    /* Topic pills */
+    .topic-pill {{
+        display: inline-block;
+        background: {BRAND['light_teal']};
+        color: {BRAND['primary_dark']};
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        margin: 3px;
+        font-weight: 500;
+    }}
+
+    /* Welcome cards */
+    .welcome-card {{
+        background: {BRAND['white']};
+        border: 1px solid {BRAND['muted']}30;
+        border-radius: 10px;
+        padding: 1rem 1.2rem;
+        cursor: pointer;
+        transition: border-color 0.2s;
+    }}
+    .welcome-card:hover {{
+        border-color: {BRAND['primary']};
+    }}
+    .welcome-card .card-icon {{
+        font-size: 1.5rem;
+        margin-bottom: 0.5rem;
+    }}
+    .welcome-card .card-title {{
+        font-weight: 600;
+        font-size: 0.9rem;
+        color: {BRAND['dark']};
+    }}
+    .welcome-card .card-example {{
+        font-size: 0.8rem;
+        color: #666;
+        font-style: italic;
+    }}
+
+    /* Disclaimer banner */
+    .disclaimer {{
+        background: {BRAND['amber']}15;
+        border: 1px solid {BRAND['amber']}40;
+        border-radius: 8px;
+        padding: 0.6rem 1rem;
+        font-size: 0.75rem;
+        color: {BRAND['dark']};
+        margin-top: 1rem;
+    }}
+</style>
+""", unsafe_allow_html=True)
+
+# --- Check API Key ---
+api_key = os.environ.get("ANTHROPIC_API_KEY") or st.secrets.get("ANTHROPIC_API_KEY", "")
+if not api_key:
+    st.error("Please set your ANTHROPIC_API_KEY in .streamlit/secrets.toml or as an environment variable.")
+    st.stop()
+
+
+# --- Knowledge Base Loading & Chunking ---
+@st.cache_resource(show_spinner="Loading CareExpert AI knowledge base...")
+def build_retriever():
+    """Load documents, chunk them, build TF-IDF index."""
+    kb_path = Path(__file__).parent / "knowledge_base"
+    if not kb_path.exists():
+        return None, None, None, None, {}
+
+    chunks = []
+    chunk_sources = []
+    chunk_source_keys = []
+    kb_stats = {"total_chars": 0, "total_lines": 0, "files": {}}
+
+    for md_file in sorted(kb_path.glob("*.md")):
+        content = md_file.read_text(encoding="utf-8", errors="ignore")
+        file_key = md_file.stem
+        source_info = get_source_display(file_key)
+        doc_name = f"{source_info['name']} ({source_info['org']})"
+
+        # Track stats
+        file_lines = content.count("\n") + 1
+        file_chars = len(content)
+        kb_stats["total_chars"] += file_chars
+        kb_stats["total_lines"] += file_lines
+        kb_stats["files"][file_key] = {"lines": file_lines, "chars": file_chars}
+
+        sections = []
+        current_section = ""
+        for line in content.split("\n"):
+            if line.startswith("## ") and current_section.strip():
+                sections.append(current_section)
+                current_section = line + "\n"
+            else:
+                current_section += line + "\n"
+        if current_section.strip():
+            sections.append(current_section)
+
+        for section in sections:
+            words = section.split()
+            if len(words) <= 800:
+                if len(words) > 30:
+                    chunks.append(section.strip())
+                    chunk_sources.append(doc_name)
+                    chunk_source_keys.append(file_key)
+            else:
+                for i in range(0, len(words), 600):
+                    chunk_words = words[i:i+800]
+                    if len(chunk_words) > 30:
+                        chunks.append(" ".join(chunk_words))
+                        chunk_sources.append(doc_name)
+                        chunk_source_keys.append(file_key)
+
+    vectorizer = TfidfVectorizer(
+        max_features=10000, stop_words="english",
+        ngram_range=(1, 2), min_df=1, max_df=0.95,
+    )
+    tfidf_matrix = vectorizer.fit_transform(chunks)
+
+    return chunks, chunk_sources, chunk_source_keys, (vectorizer, tfidf_matrix), kb_stats
+
+
+def retrieve_relevant_chunks(query, chunks, chunk_sources, chunk_source_keys, retriever_data, top_k=8):
+    """Find most relevant chunks using TF-IDF cosine similarity."""
+    vectorizer, tfidf_matrix = retriever_data
+    query_vec = vectorizer.transform([query])
+    similarities = cosine_similarity(query_vec, tfidf_matrix).flatten()
+    top_indices = np.argsort(similarities)[::-1][:top_k]
+
+    results = []
+    for idx in top_indices:
+        if similarities[idx] > 0.05:
+            source_key = chunk_source_keys[idx]
+            results.append({
+                "text": chunks[idx],
+                "source": chunk_sources[idx],
+                "source_key": source_key,
+                "source_info": get_source_display(source_key),
+                "score": float(similarities[idx]),
+            })
+    return results
+
+
+SYSTEM_PROMPT = """You are CareExpert AI, an evidence-based caregiving assistant built by MeetCaregivers. You help professional caregivers (HHAs, CNAs), family caregivers, and care managers provide safe, high-quality care to seniors aging in place.
+
+RULES:
+1. ONLY answer based on the CONTEXT provided. If the context doesn't contain relevant information, say so honestly.
+2. Use plain, warm, practical language. Avoid jargon without explanation.
+3. Be specific and actionable with concrete steps a caregiver can take right now.
+4. CITATION RULES:
+   - Reference source organizations inline: "According to the **American Heart Association**..."
+   - At the END, include a "**Sources**" section:
+     **Sources:**
+     - **Organization** — Document title (Evidence type)
+   - Use source names EXACTLY as they appear in context labels.
+   - Include PubMed PMIDs when present: (PMID: 12345678)
+
+CRITICAL SAFETY - Every health concern answer MUST include triage level:
+
+\U0001F6A8 **CALL 911 IMMEDIATELY** for: stroke signs (FAST), heart attack, severe bleeding, unconsciousness, choking, diabetic emergency with unconsciousness.
+
+\u26A0\uFE0F **CONTACT THE NURSE/DOCTOR** for: new/worsening wounds, suspected infection (fever, confusion, redness), medication concerns, falls with possible injury, significant condition changes, anything beyond caregiver scope.
+
+\u2705 **WHAT YOU CAN DO**: ADL assistance, repositioning, comfort measures, infection prevention, fall prevention, meal prep, medication reminders (NOT administration), emotional support, documenting observations.
+
+SCOPE OF PRACTICE - Caregivers CANNOT: administer medications (most states), change sterile dressings, diagnose, adjust medical equipment, insert/remove catheters or tubes. If asked, say: "This is outside caregiver scope of practice. Please contact the supervising nurse or doctor."
+
+TONE: Warm, empathetic, solution-focused. Acknowledge how hard caregiving is. Be culturally sensitive. Empower caregivers — they are the backbone of senior care."""
+
+
+# --- Build retriever ---
+chunks, chunk_sources, chunk_source_keys, retriever_data, kb_stats = build_retriever()
+if chunks is None:
+    st.error("Knowledge base not found. Add .md files to knowledge_base/ folder.")
+    st.stop()
+
+# --- Anthropic Client ---
+client = anthropic.Anthropic(api_key=api_key)
+
+# --- Global stats ---
+unique_orgs = set()
+for _info in SOURCE_REGISTRY.values():
+    for _org in _info["org"].split(","):
+        _org = _org.strip()
+        if _org and len(_org) > 2:
+            unique_orgs.add(_org)
+n_orgs = len(unique_orgs)
+
+# --- Sidebar Navigation ---
+with st.sidebar:
+    # Logo area
+    st.markdown(f"""
+    <div style="text-align: center; padding: 0.5rem 0 1rem 0;">
+        <div style="font-size: 2rem;">\U0001F49A</div>
+        <div style="font-size: 1.3rem; font-weight: 700; color: {BRAND['primary']};">CareExpert AI</div>
+        <div style="font-size: 0.75rem; color: {BRAND['muted']};">by MeetCaregivers</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # Navigation
+    page = st.radio(
+        "Navigate",
+        ["\U0001F4AC Ask CareExpert", "\U0001F4DA About & Sources", "\u2139\uFE0F How It Works"],
+        label_visibility="collapsed"
+    )
+
+    st.markdown("---")
+
+    # Quick stats
+    st.markdown(f"""
+    <div style="text-align: center; padding: 0.5rem;">
+        <div style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: {BRAND['muted']};">Knowledge Base</div>
+        <div style="font-size: 1.5rem; font-weight: 700; color: {BRAND['primary']};">{len(SOURCE_REGISTRY)}</div>
+        <div style="font-size: 0.75rem; color: {BRAND['dark']};">source documents</div>
+        <div style="font-size: 0.75rem; color: {BRAND['muted']}; margin-top: 4px;">from {n_orgs}+ health organizations</div>
+        <div style="font-size: 0.7rem; color: {BRAND['muted']}; margin-top: 2px;">16 clinical domains</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    if st.button("\U0001F5D1 Clear Chat History", use_container_width=True):
+        st.session_state.messages = []
+        st.rerun()
+
+    st.markdown("---")
+    st.markdown(f"""
+    <div style="text-align: center; font-size: 0.65rem; color: {BRAND['muted']};">
+        <strong>MeetCaregivers Inc.</strong><br>
+        Newton, MA<br><br>
+        <em>"When it comes to senior care...<br>never settle."</em><br><br>
+        \u26A0\uFE0F This tool provides educational information only.<br>
+        It is not a substitute for professional medical advice.
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# =============================================
+# PAGE: ASK CAREEXPERT (Chat)
+# =============================================
+if page == "\U0001F4AC Ask CareExpert":
+    # Header
+    st.markdown(f"""
+    <div class="brand-header">
+        <h1>\U0001F49A CareExpert AI</h1>
+        <p>Evidence-based guidance for caregivers &mdash; backed by clinical guidelines, peer-reviewed research, and federal standards</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Trust strip — show key organizations right on the chat page
+    st.markdown(f"""
+    <div style="text-align: center; padding: 0.4rem 0 0.8rem 0; font-size: 0.72rem; color: {BRAND['muted']};">
+        Powered by guidelines from &nbsp;
+        <strong style="color: {BRAND['dark']};">NIH</strong> ·
+        <strong style="color: {BRAND['dark']};">CDC</strong> ·
+        <strong style="color: {BRAND['dark']};">CMS</strong> ·
+        <strong style="color: {BRAND['dark']};">AHA</strong> ·
+        <strong style="color: {BRAND['dark']};">ADA</strong> ·
+        <strong style="color: {BRAND['dark']};">Alzheimer's Assoc</strong> ·
+        <strong style="color: {BRAND['dark']};">Cochrane</strong> ·
+        <strong style="color: {BRAND['dark']};">PubMed</strong>
+        &nbsp; and {n_orgs - 8}+ more
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Initialize chat
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    # Display chat history
+    for message in st.session_state.messages:
+        avatar = "\U0001F49A" if message["role"] == "assistant" else None
+        with st.chat_message(message["role"], avatar=avatar):
+            st.markdown(message["content"])
+            if message["role"] == "assistant" and message.get("sources_used"):
+                _sources = message["sources_used"]
+                # Build compact org list for expander title
+                _orgs = []
+                for s in _sources:
+                    short = s["org"].split(",")[0].split("(")[0].strip()
+                    if short not in _orgs:
+                        _orgs.append(short)
+                _org_preview = ", ".join(_orgs[:4])
+                if len(_orgs) > 4:
+                    _org_preview += f" +{len(_orgs)-4} more"
+                with st.expander(f"\U0001F50D Evidence consulted — {_org_preview}", expanded=False):
+                    for s in _sources:
+                        card_class = "source-card"
+                        if "Clinical" in s["type"]:
+                            card_class += " source-card-clinical"
+                        elif "Peer-Reviewed" in s["type"] or "Systematic" in s["type"]:
+                            card_class += " source-card-research"
+                        elif "Federal" in s["type"]:
+                            card_class += " source-card-federal"
+                        url_html = ""
+                        if s.get("url"):
+                            url_html = f' <a href="{s["url"]}" target="_blank" style="font-size:0.7rem; color:{BRAND["secondary"]};">View source \u2197</a>'
+                        st.markdown(f"""<div class="{card_class}">
+                            <div class="source-name">{s['icon']} {s['name']}{url_html}</div>
+                            <div class="source-org">{s['org']}</div>
+                            <span class="source-type">{s['type']}</span>
+                        </div>""", unsafe_allow_html=True)
+
+    # Chat input
+    if prompt := st.chat_input("Ask a caregiving question... (e.g., 'My client has a red area on their tailbone')"):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        with st.chat_message("assistant", avatar="\U0001F49A"):
+            with st.spinner("Searching evidence base..."):
+                try:
+                    relevant = retrieve_relevant_chunks(
+                        prompt, chunks, chunk_sources, chunk_source_keys, retriever_data, top_k=8
+                    )
+                    if relevant:
+                        context_parts = []
+                        for i, r in enumerate(relevant, 1):
+                            si = r["source_info"]
+                            context_parts.append(
+                                f"[Source {i}: {si['name']} | Organization: {si['org']} | Evidence Type: {si['type']}]\n{r['text']}"
+                            )
+                        context = "\n\n---\n\n".join(context_parts)
+                    else:
+                        context = "No relevant information found in the knowledge base."
+
+                    claude_messages = []
+                    recent = st.session_state.messages[-10:]
+                    for msg in recent[:-1]:
+                        claude_messages.append({"role": msg["role"], "content": msg["content"]})
+                    claude_messages.append({
+                        "role": "user",
+                        "content": f"Based on the following evidence, answer the caregiver's question. Cite source organizations.\n\nRETRIEVED EVIDENCE:\n{context}\n\nQUESTION: {prompt}"
+                    })
+
+                    response = client.messages.create(
+                        model="claude-sonnet-4-20250514",
+                        max_tokens=2048, temperature=0.3,
+                        system=SYSTEM_PROMPT, messages=claude_messages,
+                    )
+                    response_text = response.content[0].text
+                except Exception as e:
+                    response_text = f"I encountered an error: {str(e)}. Please try rephrasing your question."
+                    relevant = []
+
+            st.markdown(response_text)
+
+            # Evidence panel
+            sources_used = []
+            seen_keys = set()
+            for r in relevant:
+                key = r["source_key"]
+                if key not in seen_keys:
+                    seen_keys.add(key)
+                    si = r["source_info"]
+                    sources_used.append({
+                        "name": si["name"], "org": si["org"],
+                        "type": si["type"], "icon": si["icon"],
+                        "url": si.get("url", ""),
+                        "score": r["score"],
+                    })
+
+            if sources_used:
+                # Build compact org list for expander title
+                _orgs_new = []
+                for s in sources_used:
+                    short = s["org"].split(",")[0].split("(")[0].strip()
+                    if short not in _orgs_new:
+                        _orgs_new.append(short)
+                _org_preview_new = ", ".join(_orgs_new[:4])
+                if len(_orgs_new) > 4:
+                    _org_preview_new += f" +{len(_orgs_new)-4} more"
+                with st.expander(f"\U0001F50D Evidence consulted — {_org_preview_new}", expanded=False):
+                    for s in sources_used:
+                        card_class = "source-card"
+                        if "Clinical" in s["type"]:
+                            card_class += " source-card-clinical"
+                        elif "Peer-Reviewed" in s["type"] or "Systematic" in s["type"]:
+                            card_class += " source-card-research"
+                        elif "Federal" in s["type"]:
+                            card_class += " source-card-federal"
+                        url_html = ""
+                        if s.get("url"):
+                            url_html = f' <a href="{s["url"]}" target="_blank" style="font-size:0.7rem; color:{BRAND["secondary"]};">View source \u2197</a>'
+                        st.markdown(f"""<div class="{card_class}">
+                            <div class="source-name">{s['icon']} {s['name']}{url_html}</div>
+                            <div class="source-org">{s['org']}</div>
+                            <span class="source-type">{s['type']}</span>
+                        </div>""", unsafe_allow_html=True)
+
+        st.session_state.messages.append({
+            "role": "assistant", "content": response_text,
+            "sources_used": sources_used if relevant else [],
+        })
+
+    # Welcome screen
+    if not st.session_state.messages:
+        st.markdown("---")
+        st.markdown("### What can I help you with?")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown(f"""<div class="welcome-card">
+                <div class="card-icon">\U0001F6CF\uFE0F</div>
+                <div class="card-title">Daily Care & ADLs</div>
+                <div class="card-example">"How do I safely help my client transfer from bed to wheelchair?"</div>
+            </div>""", unsafe_allow_html=True)
+            st.markdown("")
+            st.markdown(f"""<div class="welcome-card">
+                <div class="card-icon">\U0001F9E0</div>
+                <div class="card-title">Dementia & Behavior</div>
+                <div class="card-example">"My client gets very agitated in the evening. What should I do?"</div>
+            </div>""", unsafe_allow_html=True)
+            st.markdown("")
+            st.markdown(f"""<div class="welcome-card">
+                <div class="card-icon">\U0001FA79</div>
+                <div class="card-title">Skin & Wound Care</div>
+                <div class="card-example">"There's a red area on my client's tailbone that won't go away"</div>
+            </div>""", unsafe_allow_html=True)
+
+        with col2:
+            st.markdown(f"""<div class="welcome-card">
+                <div class="card-icon">\U0001F6A8</div>
+                <div class="card-title">Emergencies & Triage</div>
+                <div class="card-example">"When should I call 911 vs. call the nurse?"</div>
+            </div>""", unsafe_allow_html=True)
+            st.markdown("")
+            st.markdown(f"""<div class="welcome-card">
+                <div class="card-icon">\U0001F48A</div>
+                <div class="card-title">Chronic Conditions</div>
+                <div class="card-example">"How do I help a diabetic client with daily foot care?"</div>
+            </div>""", unsafe_allow_html=True)
+            st.markdown("")
+            st.markdown(f"""<div class="welcome-card">
+                <div class="card-icon">\U0001F49A</div>
+                <div class="card-title">Caregiver Well-Being</div>
+                <div class="card-example">"I'm feeling burned out. Where can I find support?"</div>
+            </div>""", unsafe_allow_html=True)
+
+        st.markdown(f"""<div class="disclaimer">
+            \u26A0\uFE0F <strong>Important:</strong> CareExpert AI provides educational guidance based on published clinical guidelines and research.
+            It is not a substitute for professional medical advice, diagnosis, or treatment. Always consult the supervising nurse or physician for clinical decisions.
+        </div>""", unsafe_allow_html=True)
+
+
+# =============================================
+# PAGE: ABOUT & SOURCES
+# =============================================
+elif page == "\U0001F4DA About & Sources":
+    st.markdown(f"""
+    <div class="brand-header">
+        <h1>\U0001F4DA About CareExpert AI</h1>
+        <p>A deep, evidence-based knowledge system for caregiving excellence</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # --- Mission ---
+    st.markdown(f"""
+    ### Our Mission
+
+    **CareExpert AI** was built by [MeetCaregivers](https://meetcaregivers.com) to put the best available
+    evidence directly into the hands of the people who need it most: the caregivers.
+
+    Whether you're a **Home Health Aide** caring for 10 clients a week, a **family caregiver**
+    navigating your parent's dementia diagnosis, or a **care manager** coordinating across teams
+    — CareExpert AI gives you instant, trustworthy, evidence-based answers grounded in real
+    clinical guidelines and peer-reviewed research.
+
+    > *"When it comes to senior care... never settle."* — MeetCaregivers
+    """)
+
+    st.markdown("---")
+
+    # --- Knowledge Base Stats ---
+    st.markdown("### Knowledge Base at a Glance")
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        st.markdown(f"""<div class="stat-card">
+            <div class="stat-number">{n_orgs}+</div>
+            <div class="stat-label">Health Organizations</div>
+        </div>""", unsafe_allow_html=True)
+    with c2:
+        st.markdown(f"""<div class="stat-card">
+            <div class="stat-number">{len(SOURCE_REGISTRY)}</div>
+            <div class="stat-label">Source Documents</div>
+        </div>""", unsafe_allow_html=True)
+    with c3:
+        st.markdown(f"""<div class="stat-card">
+            <div class="stat-number">16</div>
+            <div class="stat-label">Clinical Domains</div>
+        </div>""", unsafe_allow_html=True)
+    with c4:
+        # Count evidence types for a more meaningful stat
+        type_counts = {}
+        for info in SOURCE_REGISTRY.values():
+            t = info["type"]
+            if "Peer-Reviewed" in t or "Systematic" in t:
+                type_counts["research"] = type_counts.get("research", 0) + 1
+            elif "Clinical" in t:
+                type_counts["clinical"] = type_counts.get("clinical", 0) + 1
+            elif "Federal" in t or "Regulation" in t or "Policy" in t:
+                type_counts["federal"] = type_counts.get("federal", 0) + 1
+        st.markdown(f"""<div class="stat-card">
+            <div class="stat-number">5</div>
+            <div class="stat-label">Evidence Types</div>
+        </div>""", unsafe_allow_html=True)
+
+    st.markdown("")
+
+    # --- Organizations ---
+    st.markdown("### Trusted Organizations Behind Our Knowledge Base")
+    st.markdown("Every answer from CareExpert AI is grounded in materials from these authoritative sources:")
+
+    # Group by type
+    type_groups = {}
+    for key, info in SOURCE_REGISTRY.items():
+        t = info["type"]
+        if "Peer-Reviewed" in t or "Systematic" in t:
+            group = "\U0001F52C Peer-Reviewed Research & Systematic Reviews"
+        elif "Clinical" in t:
+            group = "\U0001F3E5 Clinical Practice Guidelines"
+        elif "Federal" in t or "Regulation" in t or "Policy" in t:
+            group = "\U0001F3DB\uFE0F Federal Guidelines, Regulations & Policy"
+        elif "Training" in t:
+            group = "\U0001F393 Professional Training Programs"
+        else:
+            group = "\U0001F4D6 Consumer Health Resources"
+        if group not in type_groups:
+            type_groups[group] = []
+        type_groups[group].append(info)
+
+    # Display order
+    display_order = [
+        "\U0001F3E5 Clinical Practice Guidelines",
+        "\U0001F3DB\uFE0F Federal Guidelines, Regulations & Policy",
+        "\U0001F52C Peer-Reviewed Research & Systematic Reviews",
+        "\U0001F393 Professional Training Programs",
+        "\U0001F4D6 Consumer Health Resources",
+    ]
+
+    for group_name in display_order:
+        if group_name not in type_groups:
+            continue
+        items = type_groups[group_name]
+        with st.expander(f"**{group_name}** ({len(items)} sources)", expanded=True):
+            for info in items:
+                card_class = "source-card"
+                if "Clinical" in info["type"]:
+                    card_class += " source-card-clinical"
+                elif "Peer-Reviewed" in info["type"] or "Systematic" in info["type"]:
+                    card_class += " source-card-research"
+                elif "Federal" in info["type"]:
+                    card_class += " source-card-federal"
+
+                url_html = ""
+                if info.get("url"):
+                    url_html = f' <a href="{info["url"]}" target="_blank" style="font-size:0.7rem; color:{BRAND["secondary"]};">Visit \u2197</a>'
+
+                st.markdown(f"""<div class="{card_class}">
+                    <div class="source-name">{info['icon']} {info['name']}{url_html}</div>
+                    <div class="source-org">{info['org']}</div>
+                    <span class="source-type">{info['type']}</span>
+                </div>""", unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # --- 16 Topics ---
+    st.markdown("### 16 Clinical & Caregiving Domains Covered")
+
+    topics = [
+        ("\U0001F6C1", "Activities of Daily Living (ADLs)"),
+        ("\U0001F9E0", "Dementia & Alzheimer's Care"),
+        ("\U0001F6B6", "Fall Prevention & Safety"),
+        ("\U0001F48A", "Medication Safety & Reminders"),
+        ("\U0001FA79", "Skin Integrity & Pressure Injury Prevention"),
+        ("\U0001F6A8", "Emergency Recognition & Response"),
+        ("\U0001F36C", "Diabetes Management"),
+        ("\u2764\uFE0F", "Heart Failure & Cardiovascular Care"),
+        ("\U0001F9E9", "Stroke Recovery & Rehabilitation"),
+        ("\U0001F4A2", "Pain Assessment & Non-Pharmacological Management"),
+        ("\U0001F54A\uFE0F", "End-of-Life & Comfort Care"),
+        ("\U0001F9D8", "Caregiver Burnout & Self-Care"),
+        ("\U0001F5E3\uFE0F", "Communication & Cultural Sensitivity"),
+        ("\U0001F9F4", "Infection Prevention & Control"),
+        ("\U0001F957", "Nutrition, Hydration & Food Safety"),
+        ("\u2696\uFE0F", "Legal, Ethical & Scope of Practice"),
+    ]
+
+    # Display as pills
+    pills_html = ""
+    for icon, name in topics:
+        pills_html += f'<span class="topic-pill">{icon} {name}</span>'
+    st.markdown(f'<div style="line-height: 2.2;">{pills_html}</div>', unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # --- Evidence Methodology ---
+    st.markdown("### Our Evidence Methodology")
+    st.markdown("""
+    CareExpert AI follows a rigorous approach to curating its knowledge base:
+
+    1. **Systematic Literature Search** — We searched PubMed for peer-reviewed articles, systematic reviews, and meta-analyses across all 16 caregiving domains. Priority was given to Cochrane reviews and studies published in top-tier journals (Lancet, BMJ, JAGS, JAMA).
+
+    2. **Clinical Guideline Integration** — We incorporated current clinical practice guidelines from leading organizations (AHA, ADA, Alzheimer's Association, AGS, NPUAP/EPUAP) that directly inform caregiver actions.
+
+    3. **Federal Standards Compliance** — All guidance respects CMS Home Health Aide training requirements (42 CFR 484.80), CDC infection control standards, and state scope-of-practice regulations.
+
+    4. **Training Program Alignment** — Our knowledge base integrates proven caregiver training curricula including PHI's Home Health Aide Training, the REACH II caregiver intervention (NIH-funded), and the SAVVY Caregiver program.
+
+    5. **Consumer Resource Validation** — We include vetted consumer materials from NIA/NIH, MedlinePlus, AARP, and the Family Caregiver Alliance to ensure answers are accessible to non-clinical caregivers.
+
+    6. **Safety-First Triage** — Every clinical answer includes a triage framework that clearly delineates what requires 911, what requires a nurse/doctor, and what falls within caregiver scope of practice.
+    """)
+
+
+# =============================================
+# PAGE: HOW IT WORKS
+# =============================================
+elif page == "\u2139\uFE0F How It Works":
+    st.markdown(f"""
+    <div class="brand-header">
+        <h1>\u2139\uFE0F How CareExpert AI Works</h1>
+        <p>Transparent AI &mdash; here's exactly what happens when you ask a question</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("""
+    ### The CareExpert AI Pipeline
+
+    When you type a question, here's what happens behind the scenes:
+    """)
+
+    st.markdown(f"""
+    **Step 1: Understanding Your Question** \U0001F50D
+
+    Your question is analyzed to identify the key caregiving concepts — conditions, symptoms,
+    tasks, or concerns you're asking about.
+
+    **Step 2: Evidence Retrieval** \U0001F4DA
+
+    We search across our curated knowledge base — **{len(SOURCE_REGISTRY)} source documents
+    from {n_orgs}+ leading health organizations** including NIH, CDC, AHA, Alzheimer's
+    Association, and CMS — to find the most relevant clinical guidelines, research findings,
+    and practical guidance for your specific question.
+
+    **Step 3: AI-Powered Synthesis** \U0001F9E0
+
+    The retrieved evidence is sent to a large language model (Claude by Anthropic) that synthesizes
+    the information into a clear, actionable answer — always grounded in the evidence and
+    always citing its sources.
+
+    **Step 4: Safety Check** \U0001F6A8
+
+    Every answer is structured with our triage framework:
+    - \U0001F6A8 **Call 911** — life-threatening emergencies
+    - \u26A0\uFE0F **Contact the nurse/doctor** — clinical concerns beyond caregiver scope
+    - \u2705 **What you can do** — practical, safe actions within scope of practice
+
+    **Step 5: Source Transparency** \U0001F4CB
+
+    Every answer includes an expandable panel showing exactly which evidence sources were
+    consulted, which organizations produced them, and how relevant each source was to your question.
+    """)
+
+    st.markdown("---")
+
+    st.markdown("### Who Is This For?")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown(f"""<div class="stat-card">
+            <div class="stat-number">\U0001F3E5</div>
+            <div class="stat-label" style="font-size: 0.85rem; text-transform: none;">Professional Caregivers</div>
+            <div style="font-size: 0.75rem; color: #666; margin-top: 6px;">HHAs, CNAs, LPNs looking for quick, evidence-based answers during their shift</div>
+        </div>""", unsafe_allow_html=True)
+    with col2:
+        st.markdown(f"""<div class="stat-card">
+            <div class="stat-number">\U0001F46A</div>
+            <div class="stat-label" style="font-size: 0.85rem; text-transform: none;">Family Caregivers</div>
+            <div style="font-size: 0.75rem; color: #666; margin-top: 6px;">Families navigating dementia, chronic illness, and daily care decisions for their loved ones</div>
+        </div>""", unsafe_allow_html=True)
+    with col3:
+        st.markdown(f"""<div class="stat-card">
+            <div class="stat-number">\U0001F4CB</div>
+            <div class="stat-label" style="font-size: 0.85rem; text-transform: none;">Care Managers</div>
+            <div style="font-size: 0.75rem; color: #666; margin-top: 6px;">Coordinators who need a quick reference for guidelines, training materials, and best practices</div>
+        </div>""", unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    st.markdown("### What CareExpert AI Does NOT Do")
+    st.markdown("""
+    - \u274C **Does not diagnose** — It cannot tell you what condition someone has
+    - \u274C **Does not prescribe** — It never recommends specific medications or dosages
+    - \u274C **Does not replace clinical judgment** — Always defer to the supervising nurse or physician
+    - \u274C **Does not access your client's health records** — It answers general caregiving questions only
+    - \u274C **Does not make up information** — If the evidence isn't in our knowledge base, it will tell you
+    """)
+
+    st.markdown(f"""<div class="disclaimer">
+        \u26A0\uFE0F <strong>Disclaimer:</strong> CareExpert AI is an educational tool developed by MeetCaregivers Inc.
+        It provides general caregiving guidance based on published clinical guidelines and peer-reviewed research.
+        It is not a medical device, does not provide medical advice, and should not be used as a substitute for
+        professional clinical judgment. Always consult a qualified healthcare provider for medical decisions.
+    </div>""", unsafe_allow_html=True)
+
+    st.markdown("---")
+    st.markdown(f"""
+    <div style="text-align: center; padding: 1rem;">
+        <div style="font-size: 0.8rem; color: {BRAND['muted']};">
+            Built with \U0001F49A by <strong>MeetCaregivers Inc.</strong> | Newton, MA<br>
+            Innovative Online Marketplace for Senior Care<br><br>
+            <a href="https://meetcaregivers.com" target="_blank" style="color: {BRAND['primary']};">meetcaregivers.com</a>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
