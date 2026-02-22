@@ -1,0 +1,175 @@
+/* CareExpert AI - Custom Styles */
+/* Extracted from app.py for better maintainability */
+
+/* Brand colors */
+.stApp {
+    background-color: var(--brand-light-bg, #f7f9fc);
+}
+
+/* Sidebar styling */
+section[data-testid="stSidebar"] {
+    background-color: var(--brand-white, #ffffff);
+    border-right: 1px solid var(--brand-muted-alpha, #abb8c340);
+}
+
+/* Header bar */
+.brand-header {
+    background: linear-gradient(135deg, var(--brand-primary, #00d084) 0%, var(--brand-primary-dark, #00b371) 100%);
+    color: white;
+    padding: 1.2rem 1.5rem;
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+}
+.brand-header h1 {
+    margin: 0;
+    font-size: 1.6rem;
+    font-weight: 700;
+}
+.brand-header p {
+    margin: 0.3rem 0 0 0;
+    font-size: 0.9rem;
+    opacity: 0.9;
+}
+
+/* Stats cards */
+.stat-card {
+    background: var(--brand-white, #ffffff);
+    border: 1px solid var(--brand-muted-alpha, #abb8c330);
+    border-radius: 10px;
+    padding: 1rem;
+    text-align: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.stat-card .stat-number {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--brand-primary, #00d084);
+    line-height: 1;
+}
+.stat-card .stat-label {
+    font-size: 0.75rem;
+    color: var(--brand-dark, #32373c);
+    margin-top: 0.3rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Source cards in About */
+.source-card {
+    background: var(--brand-white, #ffffff);
+    border-left: 4px solid var(--brand-primary, #00d084);
+    border-radius: 0 8px 8px 0;
+    padding: 0.8rem 1rem;
+    margin-bottom: 0.6rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.source-card-clinical {
+    border-left-color: var(--brand-secondary, #0693e3);
+}
+.source-card-research {
+    border-left-color: #9b51e0;
+}
+.source-card-federal {
+    border-left-color: var(--brand-primary-dark, #00b371);
+}
+.source-card .source-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--brand-dark, #32373c);
+}
+.source-card .source-org {
+    font-size: 0.8rem;
+    color: #666;
+}
+.source-card .source-type {
+    display: inline-block;
+    background: var(--brand-light-teal, #e6faf2);
+    color: var(--brand-primary-dark, #00b371);
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-top: 4px;
+    font-weight: 500;
+}
+
+/* Topic pills */
+.topic-pill {
+    display: inline-block;
+    background: var(--brand-light-teal, #e6faf2);
+    color: var(--brand-primary-dark, #00b371);
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    margin: 3px;
+    font-weight: 500;
+}
+
+/* Welcome cards */
+.welcome-card {
+    background: var(--brand-white, #ffffff);
+    border: 1px solid var(--brand-muted-alpha, #abb8c330);
+    border-radius: 10px;
+    padding: 1rem 1.2rem;
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+.welcome-card:hover {
+    border-color: var(--brand-primary, #00d084);
+}
+.welcome-card .card-icon {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+}
+.welcome-card .card-title {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--brand-dark, #32373c);
+}
+.welcome-card .card-example {
+    font-size: 0.8rem;
+    color: #666;
+    font-style: italic;
+}
+
+/* Disclaimer banner */
+.disclaimer {
+    background: var(--brand-amber-alpha, #fcb90015);
+    border: 1px solid var(--brand-amber-alpha, #fcb90040);
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    font-size: 0.75rem;
+    color: var(--brand-dark, #32373c);
+    margin-top: 1rem;
+}
+
+/* Mobile responsiveness improvements */
+@media (max-width: 768px) {
+    .brand-header {
+        padding: 1rem 1rem;
+        margin-bottom: 1rem;
+    }
+    .brand-header h1 {
+        font-size: 1.4rem;
+    }
+    .brand-header p {
+        font-size: 0.85rem;
+    }
+
+    .stat-card {
+        padding: 0.8rem;
+    }
+    .stat-card .stat-number {
+        font-size: 1.5rem;
+    }
+
+    /* Ensure minimum touch targets */
+    button, .welcome-card, .topic-pill {
+        min-height: 44px;
+        min-width: 44px;
+    }
+
+    /* Improve sidebar behavior */
+    section[data-testid="stSidebar"] {
+        width: 280px !important;
+    }
+}

@@ -12,338 +12,48 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import json
+import time
+from datetime import timedelta
+from io import BytesIO
 
-# --- Brand Colors ---
-BRAND = {
-    "primary": "#00d084",       # MeetCaregivers teal-green
-    "primary_dark": "#00b371",  # Darker teal for hover
-    "secondary": "#0693e3",     # Cyan-blue
-    "dark": "#32373c",          # Charcoal text
-    "light_bg": "#f7f9fc",      # Off-white background
-    "white": "#ffffff",
-    "muted": "#abb8c3",         # Gray borders
-    "amber": "#fcb900",         # Warnings
-    "light_teal": "#e6faf2",    # Teal tint for cards
-}
-
-# --- Source Name Registry ---
-SOURCE_REGISTRY = {
-    "AARP_caregiving_resources": {
-        "name": "AARP Caregiving Resource Center",
-        "org": "AARP",
-        "type": "Consumer Resource",
-        "icon": "\U0001F4D6",
-        "url": "https://www.aarp.org/caregiving/",
-    },
-    "ACL_national_caregiver_strategy": {
-        "name": "National Strategy to Support Family Caregivers (2022)",
-        "org": "Administration for Community Living (ACL)",
-        "type": "Federal Policy",
-        "icon": "\U0001F3DB\uFE0F",
-        "url": "https://acl.gov/CaregiverStrategy",
-    },
-    "ADA_caregiver_resources": {
-        "name": "Diabetes Care Guidelines for Caregivers",
-        "org": "American Diabetes Association (ADA)",
-        "type": "Clinical Guideline",
-        "icon": "\U0001F3E5",
-        "url": "https://diabetes.org/tools-resources",
-    },
-    "AHA_caregiver_resources": {
-        "name": "Heart Failure & Stroke Caregiver Guidelines",
-        "org": "American Heart Association (AHA)",
-        "type": "Clinical Guideline",
-        "icon": "\U0001F3E5",
-        "url": "https://www.heart.org/en/health-topics/caregiver-support",
-    },
-    "AHRQ_WHO_NICE_guidelines": {
-        "name": "Fall Prevention, Patient Safety & Home Care Guidelines",
-        "org": "AHRQ, WHO, NICE (UK)",
-        "type": "Clinical Guideline",
-        "icon": "\U0001F3E5",
-        "url": "https://www.ahrq.gov/",
-    },
-    "AlzAssoc_caregiver_resources": {
-        "name": "Dementia Care Practice Recommendations",
-        "org": "Alzheimer's Association",
-        "type": "Clinical Guideline",
-        "icon": "\U0001F3E5",
-        "url": "https://www.alz.org/help-support/caregiving",
-    },
-    "CDC_infection_control_and_falls": {
-        "name": "Infection Control & STEADI Fall Prevention",
-        "org": "Centers for Disease Control and Prevention (CDC)",
-        "type": "Federal Guideline",
-        "icon": "\U0001F3DB\uFE0F",
-        "url": "https://www.cdc.gov/steadi/",
-    },
-    "chronic_pain_management_caregivers": {
-        "name": "Non-Pharmacological Pain Management for Caregivers",
-        "org": "American Geriatrics Society (AGS), NCCIH, APTA",
-        "type": "Clinical Guideline",
-        "icon": "\U0001F3E5",
-        "url": "https://www.americangeriatrics.org/",
-    },
-    "CMS_HHA_requirements": {
-        "name": "Home Health Aide Training & Scope of Practice (42 CFR 484.80)",
-        "org": "Centers for Medicare & Medicaid Services (CMS)",
-        "type": "Federal Regulation",
-        "icon": "\U0001F3DB\uFE0F",
-        "url": "https://www.cms.gov/",
-    },
-    "communication_and_caregiving_resources": {
-        "name": "Communication Skills & Cultural Sensitivity in Caregiving",
-        "org": "Alzheimer's Association, NICE",
-        "type": "Clinical Guideline",
-        "icon": "\U0001F3E5",
-        "url": "https://www.alz.org/",
-    },
-    "FCA_resources_catalog": {
-        "name": "Condition-Specific Caregiver Fact Sheets",
-        "org": "Family Caregiver Alliance (FCA)",
-        "type": "Consumer Resource",
-        "icon": "\U0001F4D6",
-        "url": "https://www.caregiver.org/",
-    },
-    "MedlinePlus_caregiving_topics": {
-        "name": "Consumer Health Topics: Caregiving, Falls, Dementia",
-        "org": "MedlinePlus / National Library of Medicine (NIH)",
-        "type": "Consumer Resource (NIH)",
-        "icon": "\U0001F4D6",
-        "url": "https://medlineplus.gov/",
-    },
-    "NIA_caregiving_guides": {
-        "name": "Caregiving & Alzheimer's Care Guides",
-        "org": "National Institute on Aging (NIA), NIH",
-        "type": "Federal Guideline",
-        "icon": "\U0001F3DB\uFE0F",
-        "url": "https://www.nia.nih.gov/health/caregiving",
-    },
-    "NIA_end_of_life_resources": {
-        "name": "End-of-Life Care, Comfort Care & Advance Directives",
-        "org": "National Institute on Aging (NIA), NIH",
-        "type": "Federal Guideline",
-        "icon": "\U0001F3DB\uFE0F",
-        "url": "https://www.nia.nih.gov/health/end-of-life",
-    },
-    "NIA_nutrition_elderly_resources": {
-        "name": "Nutrition, Healthy Eating & Food Safety for Older Adults",
-        "org": "National Institute on Aging (NIA), NIH",
-        "type": "Federal Guideline",
-        "icon": "\U0001F3DB\uFE0F",
-        "url": "https://www.nia.nih.gov/health/nutrition-and-food-safety",
-    },
-    "pressure_ulcer_prevention_guidelines": {
-        "name": "Pressure Injury Prevention & Staging Guidelines",
-        "org": "NPUAP/EPUAP/PPPIA, AHRQ, WOCN",
-        "type": "International Clinical Guideline",
-        "icon": "\U0001F3E5",
-        "url": "https://npiap.com/",
-    },
-    "pubmed_batch1_searches": {
-        "name": "Peer-Reviewed Research: Core Caregiving Topics",
-        "org": "PubMed / National Library of Medicine",
-        "type": "Peer-Reviewed Literature",
-        "icon": "\U0001F52C",
-        "url": "https://pubmed.ncbi.nlm.nih.gov/",
-    },
-    "pubmed_batch2_searches": {
-        "name": "Peer-Reviewed Research: Clinical Conditions",
-        "org": "PubMed / National Library of Medicine",
-        "type": "Peer-Reviewed Literature",
-        "icon": "\U0001F52C",
-        "url": "https://pubmed.ncbi.nlm.nih.gov/",
-    },
-    "pubmed_supplementary_searches": {
-        "name": "Peer-Reviewed Research: Supplementary Evidence",
-        "org": "PubMed / National Library of Medicine",
-        "type": "Peer-Reviewed Literature",
-        "icon": "\U0001F52C",
-        "url": "https://pubmed.ncbi.nlm.nih.gov/",
-    },
-    "top_systematic_reviews": {
-        "name": "Landmark Systematic Reviews & Meta-Analyses",
-        "org": "Cochrane Library, Lancet, BMJ, JAGS",
-        "type": "Highest-Level Evidence (Systematic Reviews)",
-        "icon": "\U0001F31F",
-        "url": "https://www.cochranelibrary.com/",
-    },
-    "training_curricula_overview": {
-        "name": "HHA/CNA Training Programs (PHI, REACH II, SAVVY Caregiver)",
-        "org": "PHI, NYS Dept. of Health, NIA/NIH, Univ. of Minnesota",
-        "type": "Professional Training Material",
-        "icon": "\U0001F393",
-        "url": "https://www.phinational.org/",
-    },
-}
-
-
-def get_source_display(filename_stem):
-    """Get professional display info for a source."""
-    if filename_stem in SOURCE_REGISTRY:
-        return SOURCE_REGISTRY[filename_stem]
-    return {
-        "name": filename_stem.replace("_", " ").title(),
-        "org": "CareExpert AI Knowledge Base",
-        "type": "Reference",
-        "icon": "\U0001F4C4",
-        "url": "",
-    }
+from config.sources import SOURCE_REGISTRY, get_source_display
+from config.brand import BRAND
+from prompts.system_prompt import SYSTEM_PROMPT
+from retrieval.tfidf_retriever import build_retriever, retrieve_relevant_chunks
 
 
 # --- Page Config ---
 st.set_page_config(
     page_title="CareExpert AI | MeetCaregivers",
-    page_icon="\U0001F49A",
+    page_icon="💚",
     layout="centered",
     initial_sidebar_state="expanded"
 )
 
-# --- Custom CSS ---
-st.markdown(f"""
-<style>
-    /* Brand colors */
-    .stApp {{
-        background-color: {BRAND['light_bg']};
-    }}
+# --- Mobile viewport meta tag ---
+st.markdown('<meta name="viewport" content="width=device-width, initial-scale=1.0">', unsafe_allow_html=True)
 
-    /* Sidebar styling */
-    section[data-testid="stSidebar"] {{
-        background-color: {BRAND['white']};
-        border-right: 1px solid {BRAND['muted']}40;
+# --- Load external CSS ---
+def load_css():
+    """Load custom CSS with brand colors as CSS variables."""
+    css_content = f"""
+    :root {{
+        --brand-primary: {BRAND['primary']};
+        --brand-primary-dark: {BRAND['primary_dark']};
+        --brand-secondary: {BRAND['secondary']};
+        --brand-dark: {BRAND['dark']};
+        --brand-light-bg: {BRAND['light_bg']};
+        --brand-white: {BRAND['white']};
+        --brand-muted: {BRAND['muted']};
+        --brand-amber: {BRAND['amber']};
+        --brand-light-teal: {BRAND['light_teal']};
     }}
+    """
+    with open(Path(__file__).parent / "static" / "styles.css", "r") as f:
+        css_content += f.read()
+    st.markdown(f"<style>{css_content}</style>", unsafe_allow_html=True)
 
-    /* Header bar */
-    .brand-header {{
-        background: linear-gradient(135deg, {BRAND['primary']} 0%, {BRAND['primary_dark']} 100%);
-        color: white;
-        padding: 1.2rem 1.5rem;
-        border-radius: 12px;
-        margin-bottom: 1.5rem;
-    }}
-    .brand-header h1 {{
-        margin: 0;
-        font-size: 1.6rem;
-        font-weight: 700;
-    }}
-    .brand-header p {{
-        margin: 0.3rem 0 0 0;
-        font-size: 0.9rem;
-        opacity: 0.9;
-    }}
-
-    /* Stats cards */
-    .stat-card {{
-        background: {BRAND['white']};
-        border: 1px solid {BRAND['muted']}30;
-        border-radius: 10px;
-        padding: 1rem;
-        text-align: center;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-    }}
-    .stat-card .stat-number {{
-        font-size: 1.8rem;
-        font-weight: 700;
-        color: {BRAND['primary']};
-        line-height: 1;
-    }}
-    .stat-card .stat-label {{
-        font-size: 0.75rem;
-        color: {BRAND['dark']};
-        margin-top: 0.3rem;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }}
-
-    /* Source cards in About */
-    .source-card {{
-        background: {BRAND['white']};
-        border-left: 4px solid {BRAND['primary']};
-        border-radius: 0 8px 8px 0;
-        padding: 0.8rem 1rem;
-        margin-bottom: 0.6rem;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    }}
-    .source-card-clinical {{
-        border-left-color: {BRAND['secondary']};
-    }}
-    .source-card-research {{
-        border-left-color: #9b51e0;
-    }}
-    .source-card-federal {{
-        border-left-color: {BRAND['primary_dark']};
-    }}
-    .source-card .source-name {{
-        font-weight: 600;
-        font-size: 0.9rem;
-        color: {BRAND['dark']};
-    }}
-    .source-card .source-org {{
-        font-size: 0.8rem;
-        color: #666;
-    }}
-    .source-card .source-type {{
-        display: inline-block;
-        background: {BRAND['light_teal']};
-        color: {BRAND['primary_dark']};
-        font-size: 0.7rem;
-        padding: 2px 8px;
-        border-radius: 10px;
-        margin-top: 4px;
-        font-weight: 500;
-    }}
-
-    /* Topic pills */
-    .topic-pill {{
-        display: inline-block;
-        background: {BRAND['light_teal']};
-        color: {BRAND['primary_dark']};
-        padding: 4px 12px;
-        border-radius: 20px;
-        font-size: 0.8rem;
-        margin: 3px;
-        font-weight: 500;
-    }}
-
-    /* Welcome cards */
-    .welcome-card {{
-        background: {BRAND['white']};
-        border: 1px solid {BRAND['muted']}30;
-        border-radius: 10px;
-        padding: 1rem 1.2rem;
-        cursor: pointer;
-        transition: border-color 0.2s;
-    }}
-    .welcome-card:hover {{
-        border-color: {BRAND['primary']};
-    }}
-    .welcome-card .card-icon {{
-        font-size: 1.5rem;
-        margin-bottom: 0.5rem;
-    }}
-    .welcome-card .card-title {{
-        font-weight: 600;
-        font-size: 0.9rem;
-        color: {BRAND['dark']};
-    }}
-    .welcome-card .card-example {{
-        font-size: 0.8rem;
-        color: #666;
-        font-style: italic;
-    }}
-
-    /* Disclaimer banner */
-    .disclaimer {{
-        background: {BRAND['amber']}15;
-        border: 1px solid {BRAND['amber']}40;
-        border-radius: 8px;
-        padding: 0.6rem 1rem;
-        font-size: 0.75rem;
-        color: {BRAND['dark']};
-        margin-top: 1rem;
-    }}
-</style>
-""", unsafe_allow_html=True)
+load_css()
 
 # --- Check API Key ---
 api_key = os.environ.get("ANTHROPIC_API_KEY") or st.secrets.get("ANTHROPIC_API_KEY", "")
@@ -434,31 +144,30 @@ def retrieve_relevant_chunks(query, chunks, chunk_sources, chunk_source_keys, re
     return results
 
 
-SYSTEM_PROMPT = """You are CareExpert AI, an evidence-based caregiving assistant built by MeetCaregivers. You help professional caregivers (HHAs, CNAs), family caregivers, and care managers provide safe, high-quality care to seniors aging in place.
+@st.cache_data(ttl=timedelta(hours=1))
+def cached_retrieve_relevant_chunks(query, top_k=4):
+    """Cached version of retrieval function with 1-hour TTL."""
+    return retrieve_relevant_chunks(query, chunks, chunk_sources, chunk_source_keys, retriever_data, top_k)
 
-RULES:
-1. ONLY answer based on the CONTEXT provided. If the context doesn't contain relevant information, say so honestly.
-2. Use plain, warm, practical language. Avoid jargon without explanation.
-3. Be specific and actionable with concrete steps a caregiver can take right now.
-4. CITATION RULES:
-   - Reference source organizations inline: "According to the **American Heart Association**..."
-   - At the END, include a "**Sources**" section:
-     **Sources:**
-     - **Organization** — Document title (Evidence type)
-   - Use source names EXACTLY as they appear in context labels.
-   - Include PubMed PMIDs when present: (PMID: 12345678)
 
-CRITICAL SAFETY - Every health concern answer MUST include triage level:
+@st.cache_data(ttl=timedelta(hours=1))
+def cached_llm_response(prompt, context, recent_messages, model="claude-sonnet-4-20250514"):
+    """Cached LLM response with 1-hour TTL."""
+    claude_messages = []
+    for msg in recent_messages[-10:]:
+        claude_messages.append({"role": msg["role"], "content": msg["content"]})
+    claude_messages.append({
+        "role": "user",
+        "content": f"Based on the following evidence, answer the caregiver's question. Cite source organizations.\n\nRETRIEVED EVIDENCE:\n{context}\n\nQUESTION: {prompt}"
+    })
 
-\U0001F6A8 **CALL 911 IMMEDIATELY** for: stroke signs (FAST), heart attack, severe bleeding, unconsciousness, choking, diabetic emergency with unconsciousness.
+    response = client.messages.create(
+        model=model,
+        max_tokens=900, temperature=0.3,
+        system=SYSTEM_PROMPT, messages=claude_messages,
+    )
+    return response.content[0].text
 
-\u26A0\uFE0F **CONTACT THE NURSE/DOCTOR** for: new/worsening wounds, suspected infection (fever, confusion, redness), medication concerns, falls with possible injury, significant condition changes, anything beyond caregiver scope.
-
-\u2705 **WHAT YOU CAN DO**: ADL assistance, repositioning, comfort measures, infection prevention, fall prevention, meal prep, medication reminders (NOT administration), emotional support, documenting observations.
-
-SCOPE OF PRACTICE - Caregivers CANNOT: administer medications (most states), change sterile dressings, diagnose, adjust medical equipment, insert/remove catheters or tubes. If asked, say: "This is outside caregiver scope of practice. Please contact the supervising nurse or doctor."
-
-TONE: Warm, empathetic, solution-focused. Acknowledge how hard caregiving is. Be culturally sensitive. Empower caregivers — they are the backbone of senior care."""
 
 
 # --- Build retriever ---
@@ -602,12 +311,11 @@ if page == "\U0001F4AC Ask CareExpert":
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        with st.chat_message("assistant", avatar="\U0001F49A"):
+        with st.chat_message("assistant", avatar="💚"):
             with st.spinner("Searching evidence base..."):
                 try:
-                    relevant = retrieve_relevant_chunks(
-                        prompt, chunks, chunk_sources, chunk_source_keys, retriever_data, top_k=8
-                    )
+                    # Use cached retrieval
+                    relevant = cached_retrieve_relevant_chunks(prompt, top_k=8)
                     if relevant:
                         context_parts = []
                         for i, r in enumerate(relevant, 1):
@@ -619,22 +327,8 @@ if page == "\U0001F4AC Ask CareExpert":
                     else:
                         context = "No relevant information found in the knowledge base."
 
-                    claude_messages = []
-                    recent = st.session_state.messages[-10:]
-                    for msg in recent[:-1]:
-                        claude_messages.append({"role": msg["role"], "content": msg["content"]})
-                    claude_messages.append({
-                        "role": "user",
-                        "content": f"Based on the following evidence, answer the caregiver's question. Cite source organizations.\n\nRETRIEVED EVIDENCE:\n{context}\n\nQUESTION: {prompt}"
-                    })
-
-                    response = client.messages.create(
-                        #model="claude-sonnet-4-20250514",
-                        model="claude-3-5-sonnet-20241022",
-                        max_tokens=2048, temperature=0.3,
-                        system=SYSTEM_PROMPT, messages=claude_messages,
-                    )
-                    response_text = response.content[0].text
+                    # Use cached LLM response
+                    response_text = cached_llm_response(prompt, context, st.session_state.messages[-10:])
                 except Exception as e:
                     response_text = f"I encountered an error: {str(e)}. Please try rephrasing your question."
                     relevant = []
@@ -684,10 +378,121 @@ if page == "\U0001F4AC Ask CareExpert":
                             <span class="source-type">{s['type']}</span>
                         </div>""", unsafe_allow_html=True)
 
-        st.session_state.messages.append({
-            "role": "assistant", "content": response_text,
-            "sources_used": sources_used if relevant else [],
-        })
+            # Persist assistant message in chat history so it remains after reruns
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": response_text,
+                "sources_used": sources_used if sources_used else [],
+            })
+
+    # Export options for the latest assistant response (always visible after an answer exists)
+    last_assistant_idx = None
+    for i in range(len(st.session_state.messages) - 1, -1, -1):
+        if st.session_state.messages[i]["role"] == "assistant":
+            last_assistant_idx = i
+            break
+
+    if last_assistant_idx is not None:
+        msg = st.session_state.messages[last_assistant_idx]
+        question_text = ""
+        if last_assistant_idx > 0 and st.session_state.messages[last_assistant_idx - 1]["role"] == "user":
+            question_text = st.session_state.messages[last_assistant_idx - 1]["content"]
+
+        sources_for_pdf = msg.get("sources_used", [])
+
+        col1, col2, col3 = st.columns([1, 1, 2])
+
+        with col1:
+            if st.button("📋 Copy", key="copy_last", use_container_width=True):
+                if question_text:
+                    copy_text = f"Question: {question_text}\n\nCareExpert AI Response:\n{msg['content']}\n\nSources: {', '.join([s['org'] for s in sources_for_pdf])}"
+                else:
+                    copy_text = f"CareExpert AI Response:\n{msg['content']}\n\nSources: {', '.join([s['org'] for s in sources_for_pdf])}"
+                st.markdown(
+                    f"""
+                        <script>
+                            navigator.clipboard.writeText(`{copy_text.replace('`', '\\`').replace('${', '\\${')}`);
+                            alert('Response copied to clipboard!');
+                        </script>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+        with col2:
+            if 'pdf_data' not in st.session_state:
+                if st.button("📄 Prepare PDF", key="prepare_pdf_btn", use_container_width=True):
+                    st.session_state['prepare_pdf'] = True
+                    st.rerun()
+            else:
+                st.download_button(
+                    label="📄 Download PDF",
+                    data=st.session_state['pdf_data'],
+                    file_name=st.session_state['pdf_filename'],
+                    mime="application/pdf",
+                    key="pdf_download_btn",
+                )
+
+        # Generate PDF if prepare flag is set
+        if 'prepare_pdf' in st.session_state and st.session_state['prepare_pdf']:
+            try:
+                from reportlab.lib.pagesizes import letter
+                from reportlab.lib.styles import getSampleStyleSheet
+                from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+
+                buffer = BytesIO()
+                doc = SimpleDocTemplate(buffer, pagesize=letter)
+                styles = getSampleStyleSheet()
+                story = []
+
+                # Title and timestamp
+                story.append(Paragraph("CareExpert AI Response", styles["Title"]))
+                story.append(Spacer(1, 12))
+
+                story.append(Paragraph(
+                    f"Generated on: {time.strftime('%Y-%m-%d %H:%M:%S')}",
+                    styles["Normal"],
+                ))
+                story.append(Spacer(1, 12))
+
+                # Question
+                if question_text:
+                    story.append(Paragraph(f"<b>Question:</b> {question_text}", styles["Normal"]))
+                    story.append(Spacer(1, 12))
+
+                # Response
+                story.append(Paragraph(
+                    "<b>Response:</b><br/>" + msg["content"].replace("\n", "<br/>"),
+                    styles["Normal"],
+                ))
+                story.append(Spacer(1, 12))
+
+                # Sources
+                if sources_for_pdf:
+                    sources_text = "<b>Sources Consulted:</b><br/>" + "<br/>".join(
+                        [f"• {s['name']} ({s['org']})" for s in sources_for_pdf]
+                    )
+                    story.append(Paragraph(sources_text, styles["Normal"]))
+                    story.append(Spacer(1, 12))
+
+                # Disclaimer
+                story.append(Paragraph(
+                    "<i>Disclaimer: This is educational information only, not medical advice.</i>",
+                    styles["Italic"],
+                ))
+
+                doc.build(story)
+                buffer.seek(0)
+
+                st.session_state['pdf_data'] = buffer.getvalue()
+                st.session_state['pdf_filename'] = f"careexpert_response_{int(time.time())}.pdf"
+                del st.session_state['prepare_pdf']
+                st.rerun()
+
+            except ImportError:
+                st.error("PDF export requires reportlab. Install with: pip install reportlab")
+
+        with col3:
+            st.caption("💡 Export options")
 
     # Welcome screen
     if not st.session_state.messages:
