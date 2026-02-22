@@ -629,7 +629,8 @@ if page == "\U0001F4AC Ask CareExpert":
                     })
 
                     response = client.messages.create(
-                        model="claude-sonnet-4-20250514",
+                        #model="claude-sonnet-4-20250514",
+                        model="claude-3-5-sonnet-20241022",
                         max_tokens=2048, temperature=0.3,
                         system=SYSTEM_PROMPT, messages=claude_messages,
                     )
