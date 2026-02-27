@@ -16,6 +16,10 @@ import time
 from datetime import timedelta
 from io import BytesIO
 
+# Voice capability imports
+import re
+from gtts import gTTS
+
 from config.sources import SOURCE_REGISTRY, get_source_display
 from config.brand import BRAND
 from prompts.system_prompt import SYSTEM_PROMPT
@@ -60,6 +64,43 @@ api_key = os.environ.get("ANTHROPIC_API_KEY") or st.secrets.get("ANTHROPIC_API_K
 if not api_key:
     st.error("Please set your ANTHROPIC_API_KEY in .streamlit/secrets.toml or as an environment variable.")
     st.stop()
+
+
+# --- Voice Helper Functions ---
+def clean_text_for_speech(text):
+    """Remove markdown formatting for clean speech output."""
+    # Remove markdown headers (###, ##, #)
+    text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
+    # Remove bold **text** and *italic*
+    text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
+    text = re.sub(r'\*(.*?)\*', r'\1', text)
+    # Remove links [text](url) but keep text
+    text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
+    # Remove code blocks and inline code
+    text = re.sub(r'```.*?```', '', text, flags=re.DOTALL)
+    text = re.sub(r'`([^`]+)`', r'\1', text)
+    # Remove bullet points
+    text = re.sub(r'^[\-\*]\s+', '', text, flags=re.MULTILINE)
+    # Clean up whitespace
+    text = re.sub(r'\n+', '. ', text)
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
+
+
+def generate_speech_audio(text):
+    """Generate MP3 audio from text using gTTS."""
+    try:
+        clean_text = clean_text_for_speech(text)
+        if not clean_text:
+            return None
+        tts = gTTS(text=clean_text, lang='en', slow=False)
+        audio_buffer = BytesIO()
+        tts.write_to_fp(audio_buffer)
+        audio_buffer.seek(0)
+        return audio_buffer.getvalue()
+    except Exception as e:
+        st.warning(f"Voice generation unavailable: {e}")
+        return None
 
 
 # --- Knowledge Base Loading & Chunking ---
@@ -272,46 +313,66 @@ if page == "\U0001F4AC Ask CareExpert":
         st.session_state.messages = []
 
     # Display chat history
-    for message in st.session_state.messages:
+    for idx, message in enumerate(st.session_state.messages):
         avatar = "\U0001F49A" if message["role"] == "assistant" else None
         with st.chat_message(message["role"], avatar=avatar):
             st.markdown(message["content"])
-            if message["role"] == "assistant" and message.get("sources_used"):
-                _sources = message["sources_used"]
-                # Build compact org list for expander title
-                _orgs = []
-                for s in _sources:
-                    short = s["org"].split(",")[0].split("(")[0].strip()
-                    if short not in _orgs:
-                        _orgs.append(short)
-                _org_preview = ", ".join(_orgs[:4])
-                if len(_orgs) > 4:
-                    _org_preview += f" +{len(_orgs)-4} more"
-                with st.expander(f"\U0001F50D Evidence consulted — {_org_preview}", expanded=False):
+            if message["role"] == "assistant":
+                # Text-to-speech button for assistant messages
+                if st.button("🔊 Listen", key=f"tts_{idx}", help="Listen to this response"):
+                    with st.spinner("Generating audio..."):
+                        audio_data = text_to_speech(message["content"])
+                        if audio_data:
+                            st.audio(audio_data, format="audio/mp3")
+                if message.get("sources_used"):
+                    _sources = message["sources_used"]
+                    # Build compact org list for expander title
+                    _orgs = []
                     for s in _sources:
-                        card_class = "source-card"
-                        if "Clinical" in s["type"]:
-                            card_class += " source-card-clinical"
-                        elif "Peer-Reviewed" in s["type"] or "Systematic" in s["type"]:
-                            card_class += " source-card-research"
-                        elif "Federal" in s["type"]:
-                            card_class += " source-card-federal"
-                        url_html = ""
-                        if s.get("url"):
-                            url_html = f' <a href="{s["url"]}" target="_blank" style="font-size:0.7rem; color:{BRAND["secondary"]};">View source \u2197</a>'
-                        st.markdown(f"""<div class="{card_class}">
-                            <div class="source-name">{s['icon']} {s['name']}{url_html}</div>
-                            <div class="source-org">{s['org']}</div>
-                            <span class="source-type">{s['type']}</span>
-                        </div>""", unsafe_allow_html=True)
+                        short = s["org"].split(",")[0].split("(")[0].strip()
+                        if short not in _orgs:
+                            _orgs.append(short)
+                    _org_preview = ", ".join(_orgs[:4])
+                    if len(_orgs) > 4:
+                        _org_preview += f" +{len(_orgs)-4} more"
+                    with st.expander(f"\U0001F50D Evidence consulted — {_org_preview}", expanded=False):
+                        for s in _sources:
+                            card_class = "source-card"
+                            if "Clinical" in s["type"]:
+                                card_class += " source-card-clinical"
+                            elif "Peer-Reviewed" in s["type"] or "Systematic" in s["type"]:
+                                card_class += " source-card-research"
+                            elif "Federal" in s["type"]:
+                                card_class += " source-card-federal"
+                            url_html = ""
+                            if s.get("url"):
+                                url_html = f' <a href="{s["url"]}" target="_blank" style="font-size:0.7rem; color:{BRAND["secondary"]};">View source \u2197</a>'
+                            st.markdown(f"""<div class="{card_class}">
+                                <div class="source-name">{s['icon']} {s['name']}{url_html}</div>
+                                <div class="source-org">{s['org']}</div>
+                                <span class="source-type">{s['type']}</span>
+                            </div>""", unsafe_allow_html=True)
 
-    # Chat input
-    if prompt := st.chat_input("Ask a caregiving question... (e.g., 'My client has a red area on their tailbone')"):
+    # Voice input section
+    st.markdown("---")
+    voice_col1, voice_col2 = st.columns([1, 3])
+    with voice_col1:
+        st.markdown("**🎤 Voice Input**")
+        audio_input = st.audio_input("Record your question", key="voice_input", label_visibility="collapsed")
+    with voice_col2:
+        if audio_input:
+            st.info("Voice recording received. Processing will happen when you submit.")
+            st.session_state['pending_voice'] = audio_input
+
+    # Chat input (text-based)
+    prompt = st.chat_input("Ask a caregiving question... (e.g., 'My client has a red area on their tailbone')")
+
+    if prompt:
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        with st.chat_message("assistant", avatar="💚"):
+        with st.chat_message("assistant", avatar="\U0001F49A"):
             with st.spinner("Searching evidence base..."):
                 try:
                     # Use cached retrieval
@@ -327,13 +388,20 @@ if page == "\U0001F4AC Ask CareExpert":
                     else:
                         context = "No relevant information found in the knowledge base."
 
-                    # Use cached LLM response
+                    # Use cached LLM response (full text)
                     response_text = cached_llm_response(prompt, context, st.session_state.messages[-10:])
                 except Exception as e:
                     response_text = f"I encountered an error: {str(e)}. Please try rephrasing your question."
                     relevant = []
 
+            # Display text response
             st.markdown(response_text)
+
+            # Generate and play voice response
+            with st.spinner("Generating voice response..."):
+                audio_bytes = generate_speech_audio(response_text)
+                if audio_bytes:
+                    st.audio(audio_bytes, format="audio/mp3", autoplay=True)
 
             # Evidence panel
             sources_used = []

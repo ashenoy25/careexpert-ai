@@ -11,3 +11,9 @@ streamlit>=1.40.0
 # Lightweight retrieval (TF-IDF) - no GPU needed
 scikit-learn>=1.4.0
 numpy>=1.24.0
+
+# PDF export
+reportlab>=4.0.0
+
+# Voice capability
+gTTS>=2.5.0
