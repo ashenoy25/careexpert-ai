@@ -606,7 +606,7 @@ if page == "\U0001F4AC Ask CareExpert":
             with st.spinner("Searching evidence base..."):
                 try:
                     relevant = retrieve_relevant_chunks(
-                        prompt, chunks, chunk_sources, chunk_source_keys, retriever_data, top_k=8
+                        prompt, chunks, chunk_sources, chunk_source_keys, retriever_data, top_k=5
                     )
                     if relevant:
                         context_parts = []
@@ -628,18 +628,28 @@ if page == "\U0001F4AC Ask CareExpert":
                         "content": f"Based on the following evidence, answer the caregiver's question. Cite source organizations.\n\nRETRIEVED EVIDENCE:\n{context}\n\nQUESTION: {prompt}"
                     })
 
-                    response = client.messages.create(
-                        #model="claude-sonnet-4-20250514",
-                        model="claude-3-5-sonnet-20241022",
-                        max_tokens=2048, temperature=0.3,
+                except Exception as e:
+                    st.error(f"I encountered an error: {str(e)}. Please try rephrasing your question.")
+                    relevant = []
+                    response_text = ""
+
+            # Streaming response - shows text as it's generated
+            if context:
+                response_container = st.empty()
+                response_text = ""
+                try:
+                    with client.messages.stream(
+                        model="claude-sonnet-4-20250514",
+                        max_tokens=1024, temperature=0.3,
                         system=SYSTEM_PROMPT, messages=claude_messages,
-                    )
-                    response_text = response.content[0].text
+                    ) as stream:
+                        for text in stream.text_stream:
+                            response_text += text
+                            response_container.markdown(response_text + "▌")
+                        response_container.markdown(response_text)
                 except Exception as e:
                     response_text = f"I encountered an error: {str(e)}. Please try rephrasing your question."
-                    relevant = []
-
-            st.markdown(response_text)
+                    response_container.markdown(response_text)
 
             # Evidence panel
             sources_used = []
