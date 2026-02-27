@@ -587,11 +587,13 @@ if page == "\U0001F4AC Ask CareExpert":
                             card_class += " source-card-research"
                         elif "Federal" in s["type"]:
                             card_class += " source-card-federal"
-                        url_html = ""
+                        # Make source names clickable when URLs are available
                         if s.get("url"):
-                            url_html = f' <a href="{s["url"]}" target="_blank" style="font-size:0.7rem; color:{BRAND["secondary"]};">View source \u2197</a>'
+                            source_name_html = f'<a href="{s["url"]}" target="_blank" style="color:{BRAND["primary"]}; text-decoration:none; font-weight:600;" title="Click to view source">{s["icon"]} {s["name"]}</a> <span style="font-size:0.7rem; color:{BRAND["muted"]};">↗</span>'
+                        else:
+                            source_name_html = f'{s["icon"]} {s["name"]}'
                         st.markdown(f"""<div class="{card_class}">
-                            <div class="source-name">{s['icon']} {s['name']}{url_html}</div>
+                            <div class="source-name">{source_name_html}</div>
                             <div class="source-org">{s['org']}</div>
                             <span class="source-type">{s['type']}</span>
                         </div>""", unsafe_allow_html=True)
@@ -685,11 +687,13 @@ if page == "\U0001F4AC Ask CareExpert":
                             card_class += " source-card-research"
                         elif "Federal" in s["type"]:
                             card_class += " source-card-federal"
-                        url_html = ""
+                        # Make source names clickable when URLs are available
                         if s.get("url"):
-                            url_html = f' <a href="{s["url"]}" target="_blank" style="font-size:0.7rem; color:{BRAND["secondary"]};">View source \u2197</a>'
+                            source_name_html = f'<a href="{s["url"]}" target="_blank" style="color:{BRAND["primary"]}; text-decoration:none; font-weight:600;" title="Click to view source">{s["icon"]} {s["name"]}</a> <span style="font-size:0.7rem; color:{BRAND["muted"]};">↗</span>'
+                        else:
+                            source_name_html = f'{s["icon"]} {s["name"]}'
                         st.markdown(f"""<div class="{card_class}">
-                            <div class="source-name">{s['icon']} {s['name']}{url_html}</div>
+                            <div class="source-name">{source_name_html}</div>
                             <div class="source-org">{s['org']}</div>
                             <span class="source-type">{s['type']}</span>
                         </div>""", unsafe_allow_html=True)
