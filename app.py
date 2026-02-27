@@ -761,15 +761,15 @@ Remember to consult healthcare professionals for personalized care plans and med
                             background: none;
                             border: none;
                             cursor: pointer;
-                            font-size: 33px;
+                            font-size: 24px;
                             padding: 5px;
                             border-radius: 4px;
                             color: #666;
                             display: flex;
                             align-items: center;
                             justify-content: center;
-                            height: 48px;
-                            width: 48px;
+                            height: 36px;
+                            width: 36px;
                         " title="Download as text file">
                             ⬇️
                         </button>
@@ -779,21 +779,24 @@ Remember to consult healthcare professionals for personalized care plans and med
                             background: none;
                             border: none;
                             cursor: pointer;
-                            font-size: 33px;
+                            font-size: 24px;
                             padding: 5px;
                             border-radius: 4px;
                             color: #666;
                             display: flex;
                             align-items: center;
                             justify-content: center;
-                            height: 48px;
-                            width: 48px;
+                            height: 36px;
+                            width: 36px;
                         " title="Download as PDF">
-                            <img src="{pdf_icon_data}" alt="PDF" style="width: 33px; height: 33px;">
+                            <img src="{pdf_icon_data}" alt="PDF" style="width: 24px; height: 24px;">
                         </button>
                     </a>
                 </div>
             """, unsafe_allow_html=True)
+
+            # Add vertical spacing before evidence panel
+            st.markdown("<br>", unsafe_allow_html=True)
 
             # Evidence panel
             sources_used = []
