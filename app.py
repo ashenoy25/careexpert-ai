@@ -679,8 +679,15 @@ if page == "\U0001F4AC Ask CareExpert":
                             <span class="source-type">{s['type']}</span>
                         </div>""", unsafe_allow_html=True)
 
-    # Chat input with validation
-    if prompt := st.chat_input("Ask a caregiving question... (e.g., 'My client has a red area on their tailbone')"):
+    # Chat input with validation and follow-up question handling
+    # Check if there's a follow-up question to process
+    if 'follow_up_question' in st.session_state:
+        prompt = st.session_state.follow_up_question
+        del st.session_state.follow_up_question  # Clear it after use
+    else:
+        prompt = st.chat_input("Ask a caregiving question... (e.g., 'My client has a red area on their tailbone')")
+    
+    if prompt:
         # Input validation
         prompt_clean = prompt.strip()
         if not prompt_clean:
@@ -871,6 +878,114 @@ Remember to consult healthcare professionals for personalized care plans and med
                             <div class="source-org">{s['org']}</div>
                             <span class="source-type">{s['type']}</span>
                         </div>""", unsafe_allow_html=True)
+
+            # Follow-up Questions Section
+            st.markdown("---")
+            st.markdown("### 💬 Follow-up Questions")
+            
+            # Generate contextual follow-up questions using AI
+            contextual_questions = []
+            
+            if st.session_state.get('use_ai_engine', False):
+                # Use Claude to generate contextual questions (costs API credits)
+                try:
+                    followup_prompt = f"""Based on this caregiving conversation, generate 3 relevant follow-up questions that would help the caregiver get more detailed or related information.
+
+USER'S QUESTION: {prompt}
+AI RESPONSE: {response_text[:500]}...
+
+Generate exactly 3 questions that:
+1. Are directly related to the topic discussed
+2. Help the caregiver explore the topic deeper
+3. Are practical and actionable
+4. Are phrased as if the caregiver is asking
+
+Format your response as a numbered list:
+1. [First question]
+2. [Second question] 
+3. [Third question]
+
+Only provide the numbered list, nothing else."""
+
+                    with client.messages.create(
+                        model="claude-sonnet-4-20250514",
+                        max_tokens=200, temperature=0.7,
+                        messages=[{"role": "user", "content": followup_prompt}]
+                    ) as response:
+                        followup_response = response.content[0].text
+                        
+                    # Parse the numbered list
+                    lines = followup_response.strip().split('\n')
+                    for line in lines:
+                        if line.strip() and line[0].isdigit():
+                            question = line.split('.', 1)[1].strip() if '.' in line else line.strip()
+                            if question and question.endswith('?'):
+                                contextual_questions.append(question)
+                        
+                except Exception as e:
+                    # Fallback to generic questions if AI fails
+                    contextual_questions = []
+            
+            # Fallback to topic-based questions if no AI questions generated or AI engine is off
+            if len(contextual_questions) < 3:
+                # Topic-based fallback - analyze keywords in user's question
+                question_lower = prompt.lower()
+                topic_questions = []
+                
+                if any(word in question_lower for word in ['dementia', 'alzheimer', 'memory', 'confusion']):
+                    topic_questions = [
+                        "What are the early warning signs of dementia progression?",
+                        "How can I create a safe home environment for someone with dementia?",
+                        "What activities help stimulate cognitive function in dementia patients?"
+                    ]
+                elif any(word in question_lower for word in ['fall', 'balance', 'mobility', 'walking']):
+                    topic_questions = [
+                        "What are the most effective fall prevention strategies?",
+                        "How do I assess home safety for fall risks?",
+                        "What exercises improve balance and mobility in seniors?"
+                    ]
+                elif any(word in question_lower for word in ['medication', 'medicine', 'drug', 'pill']):
+                    topic_questions = [
+                        "What are the best practices for medication management?",
+                        "How can I help with medication adherence?",
+                        "What are common medication side effects in elderly patients?"
+                    ]
+                elif any(word in question_lower for word in ['wound', 'pressure', 'ulcer', 'bedsore']):
+                    topic_questions = [
+                        "What are the stages of pressure ulcer development?",
+                        "How do I properly clean and dress different types of wounds?",
+                        "What positioning techniques prevent pressure injuries?"
+                    ]
+                elif any(word in question_lower for word in ['nutrition', 'eating', 'food', 'diet', 'hydration']):
+                    topic_questions = [
+                        "What are the nutritional needs of elderly patients?",
+                        "How can I encourage better eating and hydration?",
+                        "What are the signs of malnutrition in seniors?"
+                    ]
+                else:
+                    # Generic caregiving questions
+                    topic_questions = [
+                        "What are the most important daily care routines to establish?",
+                        "How can I effectively communicate with healthcare providers?",
+                        "What resources are available for caregiver support and respite?"
+                    ]
+                
+                # Use topic questions to fill missing slots
+                contextual_questions.extend(topic_questions[:3 - len(contextual_questions)])
+            
+            # Ensure we have exactly 3 questions
+            contextual_questions = contextual_questions[:3]
+            
+            # Display follow-up questions as clickable buttons
+            st.markdown("**Click any question to continue the conversation:**")
+            
+            cols = st.columns([1, 1, 1])
+            for i, question in enumerate(contextual_questions):
+                with cols[i]:
+                    if st.button(question, key=f"followup_{len(st.session_state.messages)}_{i}", use_container_width=True):
+                        # Auto-fill the chat input with the follow-up question
+                        st.session_state.follow_up_question = question
+                        st.rerun()
 
             st.session_state.messages.append({
                 "role": "assistant", "content": response_text,
