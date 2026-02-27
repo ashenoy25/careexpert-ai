@@ -586,6 +586,19 @@ with st.sidebar:
         st.session_state.messages = []
         st.rerun()
 
+    # AI Engine toggle (centered)
+    col1, col2, col3 = st.columns([1, 3, 1])
+    with col2:
+        # Initialize session state if not exists
+        if 'use_ai_engine' not in st.session_state:
+            st.session_state.use_ai_engine = False
+        
+        # Use session state value for checkbox
+        use_ai_engine = st.checkbox("Use AI Engine", value=st.session_state.use_ai_engine, help="Toggle between Claude AI and test responses", label_visibility="visible")
+        
+        # Update session state when checkbox changes
+        st.session_state.use_ai_engine = use_ai_engine
+
     st.markdown("---")
     st.markdown(f"""
     <div style="text-align: center; font-size: 0.65rem; color: {BRAND['muted']};">
@@ -713,13 +726,29 @@ if page == "\U0001F4AC Ask CareExpert":
                         relevant = []
                         response_text = ""
 
-            # Streaming response - shows text as it's generated (FAKE RESPONSE FOR TESTING)
+            # Streaming response - conditional based on AI Engine setting
             if context:
                 response_container = st.empty()
                 response_text = ""
-
-                # Fake 5-line response for testing (no API cost)
-                fake_response = """This is a test response to help you understand caregiving best practices.
+                
+                if st.session_state.get('use_ai_engine', False):
+                    # Use Claude AI (real API)
+                    try:
+                        with client.messages.stream(
+                            model="claude-sonnet-4-20250514",
+                            max_tokens=1024, temperature=0.3,
+                            system=SYSTEM_PROMPT, messages=claude_messages,
+                        ) as stream:
+                            for text in stream.text_stream:
+                                response_text += text
+                                response_container.markdown(response_text + "▌")
+                            response_container.markdown(response_text)
+                    except Exception as e:
+                        response_text = f"I encountered an error: {str(e)}. Please try rephrasing your question."
+                        response_container.markdown(response_text)
+                else:
+                    # Use fake response for testing (no API cost)
+                    fake_response = """This is a test response to help you understand caregiving best practices.
 
 For dementia patients, maintaining a consistent daily routine is essential for reducing confusion and anxiety. Try to establish regular times for meals, activities, and bedtime to provide a sense of security.
 
@@ -729,16 +758,16 @@ Safety measures include removing tripping hazards, installing grab bars in bathr
 
 Remember to consult healthcare professionals for personalized care plans and medication management. Each patient's needs are unique and should be addressed individually."""
 
-                # Simulate streaming by breaking into chunks
-                import time
-                words = fake_response.split()
-                current_text = ""
-                for i, word in enumerate(words):
-                    current_text += word + " "
-                    response_container.markdown(current_text + "▌")
-                    time.sleep(0.05)  # Simulate typing delay
-                response_container.markdown(fake_response)
-                response_text = fake_response
+                    # Simulate streaming by breaking into chunks
+                    import time
+                    words = fake_response.split()
+                    current_text = ""
+                    for i, word in enumerate(words):
+                        current_text += word + " "
+                        response_container.markdown(current_text + "▌")
+                        time.sleep(0.05)  # Simulate typing delay
+                    response_container.markdown(fake_response)
+                    response_text = fake_response
 
             # Download icons row (Text file + PDF in same div)
             download_link = f"data:text/plain;charset=utf-8,{response_text.replace(' ', '%20').replace('\n', '%0A').replace('\r', '%0D')}"
