@@ -598,42 +598,52 @@ if page == "\U0001F4AC Ask CareExpert":
                             <span class="source-type">{s['type']}</span>
                         </div>""", unsafe_allow_html=True)
 
-    # Chat input
+    # Chat input with validation
     if prompt := st.chat_input("Ask a caregiving question... (e.g., 'My client has a red area on their tailbone')"):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+        # Input validation
+        prompt_clean = prompt.strip()
+        if not prompt_clean:
+            st.error("⚠️ Please enter a question before submitting.")
+        elif len(prompt_clean) < 3:
+            st.error("⚠️ Please provide a more detailed question (at least 3 characters).")
+        elif prompt_clean.isdigit() or all(c in '!?.,;:()[]{}' for c in prompt_clean):
+            st.error("⚠️ Please ask a meaningful caregiving question.")
+        else:
+            # Valid input - proceed with processing
+            st.session_state.messages.append({"role": "user", "content": prompt_clean})
+            with st.chat_message("user"):
+                st.markdown(prompt_clean)
 
-        with st.chat_message("assistant", avatar="\U0001F49A"):
-            with st.spinner("Searching evidence base..."):
-                try:
-                    relevant = retrieve_relevant_chunks(
-                        prompt, chunks, chunk_sources, chunk_source_keys, retriever_data, top_k=5
-                    )
-                    if relevant:
-                        context_parts = []
-                        for i, r in enumerate(relevant, 1):
-                            si = r["source_info"]
-                            context_parts.append(
-                                f"[Source {i}: {si['name']} | Organization: {si['org']} | Evidence Type: {si['type']}]\n{r['text']}"
-                            )
-                        context = "\n\n---\n\n".join(context_parts)
-                    else:
-                        context = "No relevant information found in the knowledge base."
+            with st.chat_message("assistant", avatar="\U0001F49A"):
+                with st.spinner("Searching evidence base..."):
+                    try:
+                        relevant = retrieve_relevant_chunks(
+                            prompt, chunks, chunk_sources, chunk_source_keys, retriever_data, top_k=5
+                        )
+                        if relevant:
+                            context_parts = []
+                            for i, r in enumerate(relevant, 1):
+                                si = r["source_info"]
+                                context_parts.append(
+                                    f"[Source {i}: {si['name']} | Organization: {si['org']} | Evidence Type: {si['type']}]\n{r['text']}"
+                                )
+                            context = "\n\n---\n\n".join(context_parts)
+                        else:
+                            context = "No relevant information found in the knowledge base."
 
-                    claude_messages = []
-                    recent = st.session_state.messages[-10:]
-                    for msg in recent[:-1]:
-                        claude_messages.append({"role": msg["role"], "content": msg["content"]})
-                    claude_messages.append({
-                        "role": "user",
-                        "content": f"Based on the following evidence, answer the caregiver's question. Cite source organizations.\n\nRETRIEVED EVIDENCE:\n{context}\n\nQUESTION: {prompt}"
-                    })
+                        claude_messages = []
+                        recent = st.session_state.messages[-10:]
+                        for msg in recent[:-1]:
+                            claude_messages.append({"role": msg["role"], "content": msg["content"]})
+                        claude_messages.append({
+                            "role": "user",
+                            "content": f"Based on the following evidence, answer the caregiver's question. Cite source organizations.\n\nRETRIEVED EVIDENCE:\n{context}\n\nQUESTION: {prompt}"
+                        })
 
-                except Exception as e:
-                    st.error(f"I encountered an error: {str(e)}. Please try rephrasing your question.")
-                    relevant = []
-                    response_text = ""
+                    except Exception as e:
+                        st.error(f"I encountered an error: {str(e)}. Please try rephrasing your question.")
+                        relevant = []
+                        response_text = ""
 
             # Streaming response - shows text as it's generated
             if context:
@@ -698,10 +708,10 @@ if page == "\U0001F4AC Ask CareExpert":
                             <span class="source-type">{s['type']}</span>
                         </div>""", unsafe_allow_html=True)
 
-        st.session_state.messages.append({
-            "role": "assistant", "content": response_text,
-            "sources_used": sources_used if relevant else [],
-        })
+            st.session_state.messages.append({
+                "role": "assistant", "content": response_text,
+                "sources_used": sources_used if relevant else [],
+            })
 
     # Welcome screen
     if not st.session_state.messages:
