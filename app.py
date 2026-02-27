@@ -648,36 +648,39 @@ if page == "\U0001F4AC Ask CareExpert":
         avatar = "\U0001F49A" if message["role"] == "assistant" else None
         with st.chat_message(message["role"], avatar=avatar):
             st.markdown(message["content"])
-            if message["role"] == "assistant" and message.get("sources_used"):
-                _sources = message["sources_used"]
+            if message["role"] == "assistant":
+                _sources = message.get("sources_used", [])
                 # Build compact org list for expander title
                 _orgs = []
                 for s in _sources:
                     short = s["org"].split(",")[0].split("(")[0].strip()
                     if short not in _orgs:
                         _orgs.append(short)
-                _org_preview = ", ".join(_orgs[:4])
+                _org_preview = ", ".join(_orgs[:4]) if _orgs else "No evidence found"
                 if len(_orgs) > 4:
                     _org_preview += f" +{len(_orgs)-4} more"
                 with st.expander(f"\U0001F50D Evidence consulted — {_org_preview}", expanded=False):
-                    for s in _sources:
-                        card_class = "source-card"
-                        if "Clinical" in s["type"]:
-                            card_class += " source-card-clinical"
-                        elif "Peer-Reviewed" in s["type"] or "Systematic" in s["type"]:
-                            card_class += " source-card-research"
-                        elif "Federal" in s["type"]:
-                            card_class += " source-card-federal"
-                        # Make source names clickable when URLs are available
-                        if s.get("url"):
-                            source_name_html = f'<a href="{s["url"]}" target="_blank" style="color:{BRAND["primary"]}; text-decoration:none; font-weight:600;" title="Click to view source">{s["icon"]} {s["name"]}</a> <span style="font-size:0.7rem; color:{BRAND["muted"]};">↗</span>'
-                        else:
-                            source_name_html = f'{s["icon"]} {s["name"]}'
-                        st.markdown(f"""<div class="{card_class}">
-                            <div class="source-name">{source_name_html}</div>
-                            <div class="source-org">{s['org']}</div>
-                            <span class="source-type">{s['type']}</span>
-                        </div>""", unsafe_allow_html=True)
+                    if _sources:
+                        for s in _sources:
+                            card_class = "source-card"
+                            if "Clinical" in s["type"]:
+                                card_class += " source-card-clinical"
+                            elif "Peer-Reviewed" in s["type"] or "Systematic" in s["type"]:
+                                card_class += " source-card-research"
+                            elif "Federal" in s["type"]:
+                                card_class += " source-card-federal"
+                            # Make source names clickable when URLs are available
+                            if s.get("url"):
+                                source_name_html = f'<a href="{s["url"]}" target="_blank" style="color:{BRAND["primary"]}; text-decoration:none; font-weight:600;" title="Click to view source">{s["icon"]} {s["name"]}</a> <span style="font-size:0.7rem; color:{BRAND["muted"]};">↗</span>'
+                            else:
+                                source_name_html = f'{s["icon"]} {s["name"]}'
+                            st.markdown(f"""<div class="{card_class}">
+                                <div class="source-name">{source_name_html}</div>
+                                <div class="source-org">{s['org']}</div>
+                                <span class="source-type">{s['type']}</span>
+                            </div>""", unsafe_allow_html=True)
+                    else:
+                        st.markdown("No relevant evidence found in the knowledge base for this question.")
 
     # Chat input with validation
     if prompt := st.chat_input("Ask a caregiving question... (e.g., 'My client has a red area on their tailbone')"):
@@ -842,17 +845,17 @@ Remember to consult healthcare professionals for personalized care plans and med
                         "score": r["score"],
                     })
 
-            if sources_used:
-                # Build compact org list for expander title
-                _orgs_new = []
-                for s in sources_used:
-                    short = s["org"].split(",")[0].split("(")[0].strip()
-                    if short not in _orgs_new:
-                        _orgs_new.append(short)
-                _org_preview_new = ", ".join(_orgs_new[:4])
-                if len(_orgs_new) > 4:
-                    _org_preview_new += f" +{len(_orgs_new)-4} more"
-                with st.expander(f"\U0001F50D Evidence consulted — {_org_preview_new}", expanded=False):
+            # Build compact org list for expander title
+            _orgs_new = []
+            for s in sources_used:
+                short = s["org"].split(",")[0].split("(")[0].strip()
+                if short not in _orgs_new:
+                    _orgs_new.append(short)
+            _org_preview_new = ", ".join(_orgs_new[:4]) if _orgs_new else "No evidence found"
+            if len(_orgs_new) > 4:
+                _org_preview_new += f" +{len(_orgs_new)-4} more"
+            with st.expander(f"\U0001F50D Evidence consulted — {_org_preview_new}", expanded=False):
+                if sources_used:
                     for s in sources_used:
                         card_class = "source-card"
                         if "Clinical" in s["type"]:
@@ -871,6 +874,8 @@ Remember to consult healthcare professionals for personalized care plans and med
                             <div class="source-org">{s['org']}</div>
                             <span class="source-type">{s['type']}</span>
                         </div>""", unsafe_allow_html=True)
+                else:
+                    st.markdown("No relevant evidence found in the knowledge base for this question.")
 
             st.session_state.messages.append({
                 "role": "assistant", "content": response_text,
