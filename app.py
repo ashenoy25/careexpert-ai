@@ -552,7 +552,6 @@ with st.sidebar:
     # Logo area
     st.markdown(f"""
     <div style="text-align: center; padding: 0.5rem 0 1rem 0;">
-        <div style="font-size: 2rem;">\U0001F49A</div>
         <div style="font-size: 1.3rem; font-weight: 700; color: {BRAND['primary']};">CareExpert AI</div>
         <div style="font-size: 0.75rem; color: {BRAND['muted']};">by MeetCaregivers</div>
     </div>
@@ -618,7 +617,7 @@ if page == "\U0001F4AC Ask CareExpert":
     # Header
     st.markdown(f"""
     <div class="brand-header">
-        <h1>\U0001F49A CareExpert AI</h1>
+        <h1>CareExpert AI</h1>
         <p>Evidence-based guidance for caregivers &mdash; backed by clinical guidelines, peer-reviewed research, and federal standards</p>
     </div>
     """, unsafe_allow_html=True)
@@ -639,16 +638,38 @@ if page == "\U0001F4AC Ask CareExpert":
     </div>
     """, unsafe_allow_html=True)
 
+    # Hide default Streamlit avatars and style chat messages
+    st.markdown("""
+    <style>
+    [data-testid="stChatMessageAvatarAssistant"],
+    [data-testid="stChatMessageAvatarUser"] {
+        display: none !important;
+    }
+    [data-testid="stChatMessage"]:has([aria-label="Chat message from user"]) {
+        background-color: #e6f3ff !important;
+        border-radius: 8px !important;
+        padding: 8px !important;
+        margin: 4px 0 4px auto !important;
+        width: 50% !important;
+    }
+    [aria-label="Chat message from user"] [data-testid="stChatMessageContent"] {
+        background-color: #ffffe0 !important;
+        border-radius: 8px !important;
+        padding: 8px !important;
+        margin: 4px 0 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     # Initialize chat
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
     # Display chat history
     for message in st.session_state.messages:
-        avatar = "\U0001F49A" if message["role"] == "assistant" else None
-        with st.chat_message(message["role"], avatar=avatar):
-            st.markdown(message["content"])
-            if message["role"] == "assistant":
+        if message["role"] == "assistant":
+            with st.chat_message(message["role"], avatar=None):
+                st.markdown(message["content"])
                 _sources = message.get("sources_used", [])
                 # Build compact org list for expander title
                 _orgs = []
@@ -681,6 +702,9 @@ if page == "\U0001F4AC Ask CareExpert":
                             </div>""", unsafe_allow_html=True)
                     else:
                         st.markdown("No relevant evidence found in the knowledge base for this question.")
+        else:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
 
     # Chat input with validation
     if prompt := st.chat_input("Ask a caregiving question... (e.g., 'My client has a red area on their tailbone')"):
@@ -698,7 +722,7 @@ if page == "\U0001F4AC Ask CareExpert":
             with st.chat_message("user"):
                 st.markdown(prompt_clean)
 
-            with st.chat_message("assistant", avatar="\U0001F49A"):
+            with st.chat_message("assistant", avatar=None):
                 with st.spinner("Searching evidence base..."):
                     try:
                         relevant = retrieve_relevant_chunks(
@@ -793,15 +817,15 @@ Remember to consult healthcare professionals for personalized care plans and med
                             background: none;
                             border: none;
                             cursor: pointer;
-                            font-size: 24px;
+                            font-size: 26px;
                             padding: 5px;
                             border-radius: 4px;
                             color: #666;
                             display: flex;
                             align-items: center;
                             justify-content: center;
-                            height: 36px;
-                            width: 36px;
+                            height: 40px;
+                            width: 40px;
                         " title="Download as text file">
                             ⬇️
                         </button>
@@ -811,17 +835,17 @@ Remember to consult healthcare professionals for personalized care plans and med
                             background: none;
                             border: none;
                             cursor: pointer;
-                            font-size: 24px;
+                            font-size: 26px;
                             padding: 5px;
                             border-radius: 4px;
                             color: #666;
                             display: flex;
                             align-items: center;
                             justify-content: center;
-                            height: 36px;
-                            width: 36px;
+                            height: 40px;
+                            width: 40px;
                         " title="Download as PDF">
-                            <img src="{pdf_icon_data}" alt="PDF" style="width: 24px; height: 24px;">
+                            <img src="{pdf_icon_data}" alt="PDF" style="width: 26px; height: 26px;">
                         </button>
                     </a>
                 </div>
